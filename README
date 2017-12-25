@@ -1,3 +1,5 @@
+编译环境为blade
+
 以_, a~z 开头的token为变量
 以A~Z 开头的token为函数
 
@@ -6,13 +8,50 @@
 2、and or not => 仅限 bool 类型
 3、> >= == < <= 仅限int long float double string
 4、in => vector, map, string
-5、function 调用, 参数为1， 2， 3, 返回值为基本类型 
+5、function 调用, 参数为1， 2， 3, 返回值为ValuePtr类型
+6、内置VEC、SET函数，用于初始化常量数组、集合
 
 
-使用中的缺点：
-1、不支持类型提升，比如int + long会异常（dynamic_cast转型失败）
+
+缺点：
+1、不支持类型提升, 为防止异常，特执行如下动作:
+   对于不同类型之间的操作，如果是目标是bool结果，那么不同类型比较一律为false
+                                  + - * / % in 等操作，保持左数
+                                  VEC, SET 以第一个元素类型为标准，跳过不合法的类型
 2、由于动态求值本身问题，输入数值、表达式一定要符合要求
 3、函数调用只限于固定函数参数类型的求解
 
+性能瓶颈：
+1、变量构造、赋值（class 类型）
+2、switch不利于cpu指令流水
+
 使用方法:
-ToDo
+    std::vector<std::string> langs = {"en", "ch", "jp", "ab", "us", ""};
+    std::string exp("lang == \"en\" and hour in SET(8,12, 14, 19) and region == \"jp\"");
+    ShuntingYard sy(exp);
+    ASSERT_TRUE(sy.compile());
+    //sy.get_log() 如果编译有错，可以调用get_log得到错误信息
+    std::cout<<sy.get_log()<<"\n";
+    //声明变量占位符
+    ValuePtr lang = std::make_shared<StringValue>("");
+    ValuePtr region = std::make_shared<StringValue>("");
+    ValuePtr hour = std::make_shared<LongValue>(0);;
+    //变量字符串名
+    std::string _lang = "lang";
+    std::string _reigon = "region";
+    std::string _hour = "hour";
+    //预先绑定
+    sy.set_varible(_lang, lang);
+    sy.set_varible(_reigon, region);
+    sy.set_varible(_hour, hour);
+
+    for (size_t i = 0; i < count; ++i) {
+        //执行时，只需设置下需要更新的字段
+        std::dynamic_pointer_cast<StringValue>(lang)->val = langs[i%6];
+        std::dynamic_pointer_cast<StringValue>(region)->val = "jp";
+        std::dynamic_pointer_cast<LongValue>(hour)->val = 14;
+        //求值
+        ValuePtr value = sy.eval();
+    }
+
+上述例子的耗时为：count=1百万时，耗时253毫秒

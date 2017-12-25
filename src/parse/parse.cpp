@@ -2,22 +2,26 @@
 #include "parse/value_type.h"
 
 namespace parse {
-ShuntingYard::ShuntingYard(const std::string &e) : expression(e) {
-  std::queue<std::string> queue;
+ShuntingYard::ShuntingYard(const std::string &e) : expression(e) {}
+
+bool ShuntingYard::compile() {
+    status_log.clear();
+  std::queue<std::pair<std::string, int>> queue;
   if (build_visit_queue(queue)) {
     expression_root = build_expression_tree(queue);
     if (expression_root) {
-      std::cout << "init expression success:" << expression_root << "\n";
-      for (const auto &it : varible_map) {
-        std::cout << it.first << "|\n";
-      }
+      status_log += "init expression success:";
+      return true;
     } else {
-      std::cout << "init node tree failed:" << expression_root << "\n";
+      status_log += "init node tree failed";
+      return false;
     }
   } else {
-    std::cout << "init expression failed\n";
+    status_log += "init expression failed";
+    return false;
   }
 }
+
 int ShuntingYard::get_token_type(char c) {
   //暂时不考虑+2， -1这种case
   //这里简单实现同数字的字符可以互相结合，比如=====, +++++++  是一个运算符
@@ -29,7 +33,9 @@ int ShuntingYard::get_token_type(char c) {
     return 3;
   if (isalpha(c) || c == '_')
     return 4;
-  return 5;
+  if (c == ',')
+      return 5;
+  return 6;
 }
 
 //是否左结合
@@ -123,7 +129,23 @@ bool ShuntingYard::is_varible(const std::string &token) {
     return false;
   if (token.empty())
     return false;
-  if (token[0] == '_' || isalpha(token[0]))
+  if (token[0] == '_' || islower(token[0]))
+    return true;
+  return false;
+};
+
+bool ShuntingYard::is_inner_function(const std::string &token) {
+  if (is_operator(token))
+    return false;
+  return inner_function_map.find(token) != inner_function_map.end();
+};
+
+bool ShuntingYard::is_function(const std::string &token) {
+  if (is_operator(token))
+    return false;
+  if (token.empty())
+    return false;
+  if (isupper(token[0]))
     return true;
   return false;
 };
@@ -132,51 +154,121 @@ bool ShuntingYard::is_operator(const std::string &token) {
   return operator_map.find(token) != operator_map.end();
 };
 
+ValueType get_value_type(const std::string &token) {
+  if (token[0] == '"')
+    return vString;
+  if (token.find(".") != std::string::npos)
+    return vDouble;
+  return vLong;
+}
+
 ValuePtr ShuntingYard::paser_value(const std::string &token) {
   // 调用parse_value 必须用is_const 检查
-  if (token[0] == '"') {
+  ValueType vt = get_value_type(token);
+  switch (vt) {
+  case vString: {
     const char *start = token.c_str() + 1;
     const char *end = token.c_str() + token.size() - 1;
     return std::make_shared<StringValue>(std::string(start, end));
-  } else if (token.find(".") != std::string::npos) {
+  } break;
+  case vDouble:
     return std::make_shared<DoubleValue>(strtod(token.c_str(), NULL));
-  }
-  return std::make_shared<LongValue>(strtol(token.c_str(), NULL, 10));
+    break;
+  case vLong:
+    return std::make_shared<LongValue>(strtol(token.c_str(), NULL, 10));
+    break;
+  default:
+    status_log = "error value type";
+  };
+  return std::make_shared<Value>();
 };
-bool ShuntingYard::build_visit_queue(std::queue<std::string> &queue) {
+
+bool ShuntingYard::build_visit_queue(
+    std::queue<std::pair<std::string, int>> &queue) {
   const char *input = expression.c_str();
   const char *end = input + strlen(input);
   const char *start = input;
-  std::stack<std::string> stack;
+
+  //查函数对应的参数个数，比如a(1,2,3) => 3
+  auto get_function_param_number = [](const char *p) {
+    int left_parenthesis = -1;
+    int comma_number = 0;
+    bool has_letter = false;
+    while (*p) {
+      if (*p == '(') {
+        ++left_parenthesis;
+      } else if (*p == ',') {
+        if (left_parenthesis == 0)
+          ++comma_number;
+      } else if (*p == ')') {
+        --left_parenthesis;
+        if (left_parenthesis == -1)
+          break;
+      } else if (*p == '_' || isalpha(*p) || isdigit(*p)) {
+        has_letter = true;
+      }
+      ++p;
+    }
+    if (comma_number > 0)
+      return comma_number + 1;
+    if (has_letter)
+      return 1;
+    return 0;
+  };
+
+  std::stack<std::pair<std::string, int>> stack;
   while (start < end) {
     const char *p = nullptr;
     std::string token = next_token(start, &p);
     start = p;
     if (token.empty()) {
       break;
-    } else if (is_const(token)) {
-      queue.push(token);
-    } else if (is_varible(token)) {
-      queue.push(token);
     } else if (is_operator(token)) {
-      while (!stack.empty() && is_operator(stack.top())) {
+      while (!stack.empty() && is_operator(stack.top().first)) {
         if ((op_left_assoc(token) &&
-             op_preced(token) <= op_preced(stack.top())) ||
+             op_preced(token) <= op_preced(stack.top().first)) ||
             (!op_left_assoc(token) &&
-             op_preced(token) < op_preced(stack.top()))) {
+             op_preced(token) < op_preced(stack.top().first))) {
           queue.push(stack.top());
           stack.pop();
         } else {
           break;
         }
       }
-      stack.push(token);
+      stack.push(std::make_pair(token, tOperator));
+    } else if (is_const(token)) {
+      queue.push(std::make_pair(token, tConst));
+    } else if (is_inner_function(token)) {
+      //数一下逗号个数，来对应参数数个
+      int param_number = get_function_param_number(p);
+      stack.push(std::make_pair(token, tInnerFunction + param_number));
+    } else if (is_function(token)) {
+      //数一下逗号个数，来对应参数数个
+      int param_number = get_function_param_number(p);
+      stack.push(std::make_pair(token, tFunctionBeginIndex + param_number));
+    } else if (is_varible(token)) {
+      queue.push(std::make_pair(token, tVarible));
+    } else if (token == ",") {
+      bool find = false;
+      while (!stack.empty()) {
+        if (stack.top().first == "(") {
+          find = true;
+          break;
+        } else {
+          queue.push(stack.top());
+          stack.pop();
+        }
+      }
+      if (!find) {
+        status_log = "Error: function parentheses mismatched";
+        return false;
+      }
     } else if (token == "(") {
-      stack.push(token);
+      stack.push(std::make_pair(token, tLeftParenthesis));
     } else if (token == ")") {
       bool find = false;
       while (!stack.empty()) {
-        if (stack.top() == "(") {
+        if (stack.top().first == "(") {
           find = true;
           stack.pop();
           break;
@@ -186,17 +278,24 @@ bool ShuntingYard::build_visit_queue(std::queue<std::string> &queue) {
         }
       }
       if (!find) {
-        std::cout << "Error: parentheses mismatched 1\n";
+        status_log = "Error: parentheses mismatched";
         return false;
       }
+      if (!stack.empty()) {
+        int token_type = stack.top().second;
+        if (token_type >= tInnerFunction || token_type >= tFunctionBeginIndex) {
+          queue.push(stack.top());
+          stack.pop();
+        }
+      }
     } else {
-      std::cout << "error expression:" << token << "\n";
+      status_log = "error expression: unkonw token:" + token;
       return false;
     }
   }
   while (!stack.empty()) {
-    if (stack.top() == "(" || stack.top() == ")") {
-      std::cout << "Error: parentheses mismatched 2\n";
+    if (stack.top().first == "(" || stack.top().first == ")") {
+      status_log = "Error: parentheses mismatched";
       return false;
     }
     queue.push(stack.top());
@@ -205,70 +304,162 @@ bool ShuntingYard::build_visit_queue(std::queue<std::string> &queue) {
   return true;
 }
 
-NodePtr ShuntingYard::build_expression_tree(std::queue<std::string> &queue) {
+NodePtr ShuntingYard::build_expression_tree(
+    std::queue<std::pair<std::string, int>> &queue) {
   std::stack<NodePtr> stack;
   int temporal_varible_index = 0;
 
+  auto process_const = [&](auto &token) {
+    NodePtr node;
+    if (varible_node_map.find(token) != varible_node_map.end()) {
+      node = varible_node_map[token];
+    } else {
+      node = std::make_shared<Node>();
+      node->op_count = -1;
+      // Not used, then cancel
+      // node->result_varible = token;
+      node->value = paser_value(token);
+      //特化下bool，防止输入常量bool时，缓存失效
+      node->bool_value = node->value->get_bool();
+    }
+    varible_node_map[token] = node;
+    stack.push(node);
+    return true;
+  };
+  auto process_varible = [&](auto &token) {
+    //如果变量是同一个，就索引
+    NodePtr node;
+    if (varible_node_map.find(token) != varible_node_map.end()) {
+      node = varible_node_map[token];
+    } else {
+      node = std::make_shared<Node>();
+      node->op_count = 0;
+      node->result_varible = token;
+      varible_map[node->result_varible] = &(node->value);
+      varible_node_map[token] = node;
+    }
+    stack.push(node);
+    return true;
+  };
+  auto process_operator = [&](auto &token) {
+    size_t count = op_arg_count(token);
+    if (stack.size() < count)
+      return false;
+    NodePtr node = std::make_shared<Node>();
+    node->op_count = count;
+    node->operator_type = operator_map[token];
+    std::stack<NodePtr> temp_stack;
+    for (size_t i = 0; i < count; ++i) {
+      temp_stack.push(stack.top());
+      stack.pop();
+    }
+    int _count = 0;
+    while (!temp_stack.empty()) {
+      ++_count;
+      if (_count == 1) {
+        node->first = temp_stack.top();
+      } else if (_count == 2) {
+        node->second = temp_stack.top();
+      } else if (_count == 3) {
+        node->third = temp_stack.top();
+      }
+      // node->varibles.push_back(temp_stack.top());
+      temp_stack.pop();
+    }
+    stack.push(node);
+    return true;
+  };
+
+  //内置函数都是常量表达式
+  auto process_inner_function = [&](auto &token, int param_number) {
+    if (stack.size() < param_number)
+      return false;
+
+    std::stack<NodePtr> temp_stack;
+    for (size_t i = 0; i < param_number; ++i) {
+      temp_stack.push(stack.top());
+      stack.pop();
+    }
+    std::vector<ValuePtr> values;
+    while (!temp_stack.empty()) {
+      values.push_back(temp_stack.top()->value);
+      temp_stack.pop();
+    }
+    if (values.size() == 0)
+      return false;
+    NodePtr node = std::make_shared<Node>();
+    node->op_count = -1;
+    if (token == "VEC") {
+      node->value = to_vec_value(values);
+      if (node->value->type() == vNull) {
+          status_log = "all value not the same type in VEC";
+          return false;
+      }
+    } else if (token == "SET") {
+      node->value = to_set_value(values);
+      if (node->value->type() == vNull) {
+          status_log = "all value not the same type in SET";
+          return false;
+      }
+    } else {
+      status_log = "not implemented";
+      return false;
+    }
+    stack.push(node);
+    return true;
+  };
+
+  auto process_function = [&](auto &token, int param_number) {
+    if (stack.size() < param_number)
+      return false;
+    NodePtr node = std::make_shared<Node>();
+    node->op_count = param_number;
+    node->result_varible = token;
+    node->operator_type = function_map[param_number];
+    std::stack<NodePtr> temp_stack;
+    for (size_t i = 0; i < param_number; ++i) {
+      temp_stack.push(stack.top());
+      stack.pop();
+    }
+    int _count = 0;
+    while (!temp_stack.empty()) {
+      ++_count;
+      if (_count == 1) {
+        node->first = temp_stack.top();
+      } else if (_count == 2) {
+        node->second = temp_stack.top();
+      } else if (_count == 3) {
+        node->third = temp_stack.top();
+      } else {
+        status_log = "error function params number";
+      }
+      temp_stack.pop();
+    }
+    stack.push(node);
+    return true;
+  };
+
   while (!queue.empty()) {
     ++temporal_varible_index;
-    const std::string &token = queue.front();
-    if (is_const(token)) {
-      NodePtr node;
-      if (varible_node_map.find(token) != varible_node_map.end()) {
-        node = varible_node_map[token];
-      } else {
-        node = std::make_shared<Node>();
-        node->op_count = -1;
-        // Not used, then cancel
-        // node->result_varible = token;
-        node->result_varible_index = temporal_varible_index;
-        node->value = paser_value(token);
-        //特化下bool，防止输入常量bool时，缓存失效
-        node->bool_value = node->value->get_bool();
-      }
-      varible_node_map[token] = node;
-      stack.push(node);
-    } else if (is_operator(token)) {
-      size_t count = op_arg_count(token);
-      NodePtr node = std::make_shared<Node>();
-      node->op_count = count;
-      node->operator_type = operator_map[token];
-      std::stack<NodePtr> temp_stack;
-      for (size_t i = 0; i < count; ++i) {
-        temp_stack.push(stack.top());
-        stack.pop();
-      }
-      int _count = 0;
-      while (!temp_stack.empty()) {
-        ++_count;
-        if (_count == 1) {
-          node->first = temp_stack.top();
-        } else if (_count == 2) {
-          node->second = temp_stack.top();
-        } else if (_count == 3) {
-          node->third = temp_stack.top();
-        }
-        // node->varibles.push_back(temp_stack.top());
-        temp_stack.pop();
-      }
-      stack.push(node);
-    } else if (is_varible(token)) {
-      //如果变量是同一个，就索引
-      NodePtr node;
-      if (varible_node_map.find(token) != varible_node_map.end()) {
-        node = varible_node_map[token];
-      } else {
-        node = std::make_shared<Node>();
-        node->op_count = 0;
-        node->result_varible = token;
-        varible_map[node->result_varible] = &(node->value);
-        std::cout << "init varible:" << node->result_varible
-                  << ", loc:" << &(node->value) << "\n";
-        varible_node_map[token] = node;
-      }
-      // Not used, then cancel
-      // node->result_varible_index = temporal_varible_index;
-      stack.push(node);
+    const std::pair<std::string, int> &token = queue.front();
+    if (token.second == tConst) {
+      if (!process_const(token.first))
+        return false;
+    } else if (token.second == tOperator) {
+      if (!process_operator(token.first))
+        return false;
+    } else if (token.second == tVarible) {
+      if (!process_varible(token.first))
+        return false;
+    } else if (token.second >= tFunctionBeginIndex) { //按函数处理
+      if (!process_function(token.first, token.second - tFunctionBeginIndex))
+        return false;
+    } else if (token.second >= tInnerFunction) {
+      //内置函数，转换常量
+      if (!process_inner_function(token.first, token.second - tInnerFunction))
+        return false;
+    } else {
+      status_log = "eror_type:" + token.first + " " + std::to_string(token.second);
     }
     queue.pop();
   }
@@ -279,13 +470,12 @@ NodePtr ShuntingYard::build_expression_tree(std::queue<std::string> &queue) {
 }
 
 void ShuntingYard::op_varible(NodePtr &node) {
-
   switch (node->operator_type) {
   case kNOT:
     node->bool_value = !node->first->value->get_bool();
     break;
   case kFUNC1:
-    node->value = func_varible(node->first->value);
+    node->value = func1_map[node->result_varible](node->first->value);
     break;
   default:
     // ADD ERROR TIP
@@ -318,7 +508,7 @@ void ShuntingYard::op_varible_varible(NodePtr &node) {
     node->value = first->value->mod(second->value);
     break;
   case kIN:
-    node->bool_value = first->value->in(second->value);
+    node->bool_value = second->value->in(first->value);
     break;
   case kGREATE:
     node->bool_value = first->value->gt(second->value);
@@ -336,10 +526,11 @@ void ShuntingYard::op_varible_varible(NodePtr &node) {
     node->bool_value = first->value->equal(second->value);
     break;
   case kFUNC2:
-    node->value = func_varible_varible(node->first->value, node->second->value);
+    node->value = func2_map[node->result_varible](node->first->value,
+                                                  node->second->value);
     break;
   default:
-    std::cout << "not support operator\n";
+    status_log = "not support operator";
     node->value = std::make_shared<Value>();
   };
 }
@@ -347,7 +538,7 @@ void ShuntingYard::op_varible_varible(NodePtr &node) {
 void ShuntingYard::op_varible_varible_varible(NodePtr &node) {
   switch (node->operator_type) {
   case kFUNC3:
-    node->value = func_varible_varible_varible(
+    node->value = func3_map[node->result_varible](
         node->first->value, node->second->value, node->third->value);
     break;
   default:
@@ -363,6 +554,7 @@ void ShuntingYard::eval_expression(NodePtr &node) {
     eval_expression(node->second);
     eval_expression(node->third);
     op_varible_varible_varible(node);
+    return;
   }
   case 2: {
     eval_expression(node->first);
@@ -381,20 +573,20 @@ void ShuntingYard::eval_expression(NodePtr &node) {
     return;
     break;
   case -1: //常量在初始化就做好
-    // node->value = const_varibles[node->result_varible_index];
     return;
     break;
   default:
-    std::cout << "error count\n";
+    status_log = "error count";
   };
 }
 
 bool ShuntingYard::eval_bool() {
-  eval_expression(expression_root);
+  eval();
   return expression_root->bool_value;
 }
 
 ValuePtr ShuntingYard::eval() {
+  status_log.clear();
   eval_expression(expression_root);
   return expression_root->value;
 }

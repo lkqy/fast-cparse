@@ -8,6 +8,7 @@
 #include <string>
 #include <time.h>
 #include <unordered_map>
+#include <map>
 #include <vector>
 
 namespace parse {
@@ -15,10 +16,15 @@ namespace parse {
 class Node;
 typedef std::shared_ptr<Node> NodePtr;
 
+typedef std::function<ValuePtr(const ValuePtr &)> BindFunc1;
+typedef std::function<ValuePtr(const ValuePtr &, const ValuePtr &)> BindFunc2;
+typedef std::function<ValuePtr(const ValuePtr &, const ValuePtr &,
+                               const ValuePtr &)>
+    BindFunc3;
+
 class Node {
 public:
   int op_count;
-  int result_varible_index;
   OperateType operator_type;
   //由于使用中，大多数情况都是bool类型，特cache一个
   //测试发现，cache后，性能翻倍
@@ -32,11 +38,11 @@ public:
 };
 
 // TODO: 要不要做范型？施加更强的计算约束换更高的性能
-class ShuntingYard {
 
-public:
-  ShuntingYard(const std::string &e);
-  virtual ~ShuntingYard(){};
+class ShuntingYard;
+typedef std::shared_ptr<ShuntingYard> ShuntingYardPtr;
+class ShuntingYard {
+private:
   inline bool skip_char(char c) {
     if (c == ' ' || c == '\t')
       return true;
@@ -60,46 +66,48 @@ public:
   bool is_const(const std::string &token);
   bool is_varible(const std::string &token);
   bool is_operator(const std::string &token);
+  bool is_function(const std::string &token);
+  bool is_inner_function(const std::string &token);
   ValuePtr paser_value(const std::string &token);
 
-  bool build_visit_queue(std::queue<std::string> &queue);
-  NodePtr build_expression_tree(std::queue<std::string> &queue);
+  bool build_visit_queue(std::queue<std::pair<std::string, int>> &queue);
+  NodePtr build_expression_tree(std::queue<std::pair<std::string, int>> &queue);
 
   void op_varible(NodePtr &node);
   void op_varible_varible(NodePtr &node);
   void op_varible_varible_varible(NodePtr &node);
 
-  virtual ValuePtr func_varible(ValuePtr &v) {
-    // TODO Add error tip
-    return std::make_shared<Value>();
-  };
-  virtual ValuePtr func_varible_varible(ValuePtr &v1, ValuePtr &v2) {
-    // TODO Add error tip
-    return std::make_shared<Value>();
-  };
-  virtual ValuePtr func_varible_varible_varible(ValuePtr &v1, ValuePtr &v2,
-                                                ValuePtr &v3) {
-    // TODO Add error tip
-    return std::make_shared<Value>();
-  };
-
   void eval_expression(NodePtr &node);
+
+public:
+  ShuntingYard(const std::string &e);
+  ~ShuntingYard(){};
+
+  //返回表达式是否正常
+  bool compile();
 
   bool eval_bool();
 
   ValuePtr eval();
 
-  void set_varible(std::string key, ValuePtr value) {
+  void set_varible(const std::string& key, ValuePtr& value) {
     const auto &it = varible_map.find(key);
     if (it == varible_map.end())
       return;
     *(it->second) = value;
   };
-  /*
-  void set_varible(std::string& key, ValuePtr& value) {
-      const auto& it = varible_map.find(key);
-      if (it== varible_map.end()) return;
-      *(it->second) = value;
+
+  void set_func1(std::string key, BindFunc1 f) { func1_map[key] = f; };
+  void set_func2(std::string key, BindFunc2 f) { func2_map[key] = f; };
+  void set_func3(std::string key, BindFunc3 f) { func3_map[key] = f; };
+  const std::string& get_log() {return status_log;};
+
+  /* TODO make it more easy to use
+  static ShuntingYardPtr get_instance(const std::string &expression) {
+    if (sy_instance_map.find(expression) == sy_instance_map.end()) {
+      sy_instance_map[expression] = std::make_shared<ShuntingYard>(expression);
+    }
+    return sy_instance_map[expression];
   };
   */
 
@@ -110,62 +118,37 @@ private:
       {"/", kDIV},           {"%", kMOD},    {"in", kIN},
       {">", kGREATE},        {"<", kLOWER},  {">=", kGREATEOREQUAL},
       {"<=", kLOWEROREQUAL}, {"==", kEQUAL}, {"not", kNOT},
-      {"and", kAND},         {"or", kOR}};
+      {"and", kAND},         {"or", kOR},
+  };
 
+  std::unordered_map<std::string, OperateType> inner_function_map = {
+      {"VEC", kVEC}, {"SET", kSET},
+  };
+
+  // 函数类型
+  std::unordered_map<int, OperateType> function_map = {
+      {1, kFUNC1}, {2, kFUNC2}, {3, kFUNC3}
+  };
   //源表达式
   std::string expression;
 
-  typedef std::shared_ptr<ValuePtr> ValuePtrPtr;
-
   //变量，初始化索引到表达式树上，以省去访问map的时间
-  std::unordered_map<std::string, ValuePtr *> varible_map;
+  std::map<std::string, ValuePtr *> varible_map;
 
   //检索node->(token, node)
   std::unordered_map<std::string, NodePtr> varible_node_map;
 
+  std::unordered_map<std::string, BindFunc1> func1_map;
+  std::unordered_map<std::string, BindFunc2> func2_map;
+  std::unordered_map<std::string, BindFunc3> func3_map;
+
   //表达式节点树
   NodePtr expression_root;
+
+  //
+  std::string status_log;
+  //保存所有初始化实例，减少内存占用，这里需要考虑线程安全，以防止同时修改数据
+  static std::unordered_map<std::string, ShuntingYardPtr> sy_instance_map;
 };
 
-template <typename RET_T> class ShuntingYardFun0 : public ShuntingYard {
-  typedef std::function<RET_T()> Func;
-
-public:
-  ShuntingYardFun0(const std::string &e) : ShuntingYard(e){};
-  ValuePtr eval(std::unordered_map<std::string, ValuePtr> &varibles,
-                std::unordered_map<std::string, Func> &funcs);
-};
-
-template <typename RET_T, typename PARAM_T>
-class ShuntingYardFun1 : public ShuntingYard {
-  typedef std::function<RET_T(PARAM_T)> Func;
-
-public:
-  ShuntingYardFun1(const std::string &e) : ShuntingYard(e){};
-  ValuePtr eval(std::unordered_map<std::string, ValuePtr> &varibles,
-                std::unordered_map<std::string, Func> &funcs);
-};
-
-template <typename RET_T, typename PARAM1_T, typename PARAM2_T>
-class ShuntingYardFun2 : public ShuntingYard {
-  typedef std::function<RET_T(PARAM1_T, PARAM2_T)> Func;
-
-public:
-  ShuntingYardFun2(const std::string &e) : ShuntingYard(e){};
-  ValuePtr eval(std::unordered_map<std::string, ValuePtr> &varibles,
-                std::unordered_map<std::string, Func> &funcs);
-};
-
-template <typename RET_T, typename PARAM1_T, typename PARAM2_T,
-          typename PARAM3_T>
-class ShuntingYardFun3 : public ShuntingYard {
-  typedef std::function<RET_T(PARAM1_T, PARAM2_T, PARAM3_T)> Func;
-
-public:
-  virtual void op_varible_varible_varible(NodePtr &node);
-  ShuntingYardFun3(const std::string &e) : ShuntingYard(e){};
-  ValuePtr eval(std::unordered_map<std::string, ValuePtr> &varibles,
-                std::unordered_map<std::string, Func> &funcs);
-};
-
-} // namespace parse
+}; // namespace parse
