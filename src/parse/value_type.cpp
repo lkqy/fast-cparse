@@ -1,47 +1,49 @@
 #include "parse/value_type.h"
 
 namespace parse {
-ValuePtr to_vec_value(std::vector<ValuePtr> &values) {
+Value *to_vec_value(std::vector<Value *> &values) {
   switch (values[0]->type()) {
   case vInt:
-    return std::make_shared<IntVecValue>(values);
+    return new IntVecValue(values);
     break;
   case vLong:
-    return std::make_shared<LongVecValue>(values);
+    return new LongVecValue(values);
     break;
   case vFloat:
-    return std::make_shared<FloatVecValue>(values);
+    return new FloatVecValue(values);
     break;
   case vDouble:
-    return std::make_shared<DoubleVecValue>(values);
+    return new DoubleVecValue(values);
     break;
   case vString:
-    return std::make_shared<StringVecValue>(values);
+    return new StringVecValue(values);
     break;
   default:
-      return std::make_shared<Value>();
+    return new Value();
   };
+  return new Value();
 }
 
-ValuePtr to_set_value(std::vector<ValuePtr> &values) {
+Value *to_set_value(std::vector<Value *> &values) {
   switch (values[0]->type()) {
   case vInt:
-    return std::make_shared<IntSetValue>(values);
+    return new IntSetValue(values);
     break;
   case vLong:
-    return std::make_shared<LongSetValue>(values);
+    return new LongSetValue(values);
     break;
   case vFloat:
-    return std::make_shared<FloatSetValue>(values);
+    return new FloatSetValue(values);
     break;
   case vDouble:
-    return std::make_shared<DoubleSetValue>(values);
+    return new DoubleSetValue(values);
     break;
   case vString:
-    return std::make_shared<StringSetValue>(values);
+    return new StringSetValue(values);
     break;
   default:
-      return std::make_shared<Value>();
+    return new Value();
   };
+  return new Value();
 }
 } // namespace parse

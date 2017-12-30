@@ -1,6 +1,7 @@
 #pragma once
 #include "parse/value_type.h"
 #include <iostream>
+#include <map>
 #include <memory>
 #include <queue>
 #include <stack>
@@ -8,7 +9,6 @@
 #include <string>
 #include <time.h>
 #include <unordered_map>
-#include <map>
 #include <vector>
 
 namespace parse {
@@ -16,24 +16,39 @@ namespace parse {
 class Node;
 typedef std::shared_ptr<Node> NodePtr;
 
-typedef std::function<ValuePtr(const ValuePtr &)> BindFunc1;
-typedef std::function<ValuePtr(const ValuePtr &, const ValuePtr &)> BindFunc2;
-typedef std::function<ValuePtr(const ValuePtr &, const ValuePtr &,
-                               const ValuePtr &)>
-    BindFunc3;
+typedef std::function<Value *(Value *)> BindFunc1;
+typedef std::function<Value *(Value *, Value *)> BindFunc2;
+typedef std::function<Value *(Value *, Value *, Value *)> BindFunc3;
 
 class Node {
+public:
+  Node() : value(nullptr), first(nullptr), second(nullptr), third(nullptr){};
+  ~Node() {
+    if (value)
+      delete value;
+    if (first)
+      delete first;
+    if (second)
+      delete second;
+    if (third)
+      delete third;
+    value = nullptr;
+    first = nullptr;
+    second = nullptr;
+    third = nullptr;
+  };
+
 public:
   int op_count;
   OperateType operator_type;
   //由于使用中，大多数情况都是bool类型，特cache一个
   //测试发现，cache后，性能翻倍
   bool bool_value;
-  ValuePtr value;
+  Value *value;
   //可能使用到的操作数
-  NodePtr first;
-  NodePtr second;
-  NodePtr third;
+  Node *first;
+  Node *second;
+  Node *third;
   std::string result_varible;
 };
 
@@ -68,29 +83,45 @@ private:
   bool is_operator(const std::string &token);
   bool is_function(const std::string &token);
   bool is_inner_function(const std::string &token);
-  ValuePtr paser_value(const std::string &token);
+  Value *paser_value(const std::string &token);
+  Value *paser_varible(const std::string &token);
 
   bool build_visit_queue(std::queue<std::pair<std::string, int>> &queue);
-  NodePtr build_expression_tree(std::queue<std::pair<std::string, int>> &queue);
+  Node *build_expression_tree(std::queue<std::pair<std::string, int>> &queue);
 
-  void op_varible(NodePtr &node);
-  void op_varible_varible(NodePtr &node);
-  void op_varible_varible_varible(NodePtr &node);
+  Value *op_varible(const std::string &result_varible,
+                    OperateType operator_type, Value *value);
+  inline Value *op_varible_varible(const std::string &result_varible,
+                                   OperateType operator_type, Value *first,
+                                   Value *second);
+  inline Value *op_varible_varible_varible(const std::string &result_varible,
+                                           OperateType operator_type,
+                                           Value *first, Value *second,
+                                           Value *third);
 
-  void eval_expression(NodePtr &node);
+  inline Value *
+  eval_expression(Node *node,
+                  std::vector<std::pair<const char *, Value *>> &varibles);
+
+  Value *find_varible(std::vector<std::pair<const char *, Value *>> &varibles,
+                      std::string &key);
 
 public:
   ShuntingYard(const std::string &e);
-  ~ShuntingYard(){};
+  ~ShuntingYard() {
+    if (expression_root)
+      delete expression_root;
+    expression_root = nullptr;
+  };
 
   //返回表达式是否正常
   bool compile();
 
-  bool eval_bool();
+  bool eval_bool(std::vector<std::pair<const char *, Value *>> &varibles);
 
-  ValuePtr eval();
+  Value *eval(std::vector<std::pair<const char *, Value *>> &varibles);
 
-  void set_varible(const std::string& key, ValuePtr& value) {
+  void set_varible(const std::string &key, ValuePtr &value) {
     const auto &it = varible_map.find(key);
     if (it == varible_map.end())
       return;
@@ -100,16 +131,12 @@ public:
   void set_func1(std::string key, BindFunc1 f) { func1_map[key] = f; };
   void set_func2(std::string key, BindFunc2 f) { func2_map[key] = f; };
   void set_func3(std::string key, BindFunc3 f) { func3_map[key] = f; };
-  const std::string& get_log() {return status_log;};
+  const std::string &get_log() { return status_log; };
 
-  /* TODO make it more easy to use
-  static ShuntingYardPtr get_instance(const std::string &expression) {
-    if (sy_instance_map.find(expression) == sy_instance_map.end()) {
-      sy_instance_map[expression] = std::make_shared<ShuntingYard>(expression);
-    }
-    return sy_instance_map[expression];
+  std::string &get_str_const(std::string str) {
+    const_strings.push_back(str);
+    return const_strings[const_strings.size() - 1];
   };
-  */
 
 private:
   //操作符
@@ -118,7 +145,7 @@ private:
       {"/", kDIV},           {"%", kMOD},    {"in", kIN},
       {">", kGREATE},        {"<", kLOWER},  {">=", kGREATEOREQUAL},
       {"<=", kLOWEROREQUAL}, {"==", kEQUAL}, {"not", kNOT},
-      {"and", kAND},         {"or", kOR},
+      {"!=", kNOTEQUAL},     {"and", kAND},  {"or", kOR},
   };
 
   std::unordered_map<std::string, OperateType> inner_function_map = {
@@ -127,28 +154,40 @@ private:
 
   // 函数类型
   std::unordered_map<int, OperateType> function_map = {
-      {1, kFUNC1}, {2, kFUNC2}, {3, kFUNC3}
-  };
+      {1, kFUNC1}, {2, kFUNC2}, {3, kFUNC3}};
   //源表达式
   std::string expression;
 
   //变量，初始化索引到表达式树上，以省去访问map的时间
   std::map<std::string, ValuePtr *> varible_map;
-
-  //检索node->(token, node)
-  std::unordered_map<std::string, NodePtr> varible_node_map;
+  std::vector<std::string> const_strings;
 
   std::unordered_map<std::string, BindFunc1> func1_map;
   std::unordered_map<std::string, BindFunc2> func2_map;
   std::unordered_map<std::string, BindFunc3> func3_map;
 
   //表达式节点树
-  NodePtr expression_root;
+  Node *expression_root;
 
   //
   std::string status_log;
+};
+
+// 非线程安全，只能在同一个线程中使用
+class ShuntingYardManager {
+public:
+  ShuntingYardManager(){};
+  ShuntingYardPtr &get_instance(const std::string expression) {
+    if (sy_instance_map.find(expression) == sy_instance_map.end()) {
+      sy_instance_map[expression] = std::make_shared<ShuntingYard>(expression);
+      sy_instance_map[expression]->compile();
+    }
+    return sy_instance_map[expression];
+  };
+
+private:
   //保存所有初始化实例，减少内存占用，这里需要考虑线程安全，以防止同时修改数据
-  static std::unordered_map<std::string, ShuntingYardPtr> sy_instance_map;
+  std::unordered_map<std::string, ShuntingYardPtr> sy_instance_map;
 };
 
 }; // namespace parse

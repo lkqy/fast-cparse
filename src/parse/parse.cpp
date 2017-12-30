@@ -2,10 +2,12 @@
 #include "parse/value_type.h"
 
 namespace parse {
-ShuntingYard::ShuntingYard(const std::string &e) : expression(e) {}
+
+ShuntingYard::ShuntingYard(const std::string &e)
+    : expression(e), expression_root(nullptr) {}
 
 bool ShuntingYard::compile() {
-    status_log.clear();
+  status_log.clear();
   std::queue<std::pair<std::string, int>> queue;
   if (build_visit_queue(queue)) {
     expression_root = build_expression_tree(queue);
@@ -27,14 +29,14 @@ int ShuntingYard::get_token_type(char c) {
   //这里简单实现同数字的字符可以互相结合，比如=====, +++++++  是一个运算符
   if (c == '+' || c == '-' || c == '*' || c == '/' || c == '%')
     return 1;
-  if (c == '>' || c == '<' || c == '=')
+  if (c == '>' || c == '<' || c == '=' || c == '!')
     return 2;
   if (isdigit(c) || c == '.')
     return 3;
   if (isalpha(c) || c == '_')
     return 4;
   if (c == ',')
-      return 5;
+    return 5;
   return 6;
 }
 
@@ -115,8 +117,11 @@ std::string ShuntingYard::next_token(const char *input,
 bool ShuntingYard::is_const(const std::string &token) {
   if (token.empty())
     return false;
-  if (token[0] == '"')
+  if (token[0] == '"') {
+    if (token[token.size() - 1] != '"' || token.size() == 1)
+      return false;
     return true;
+  }
   if (isdigit(token[0]))
     return true;
   if (token.size() >= 2 && isdigit(token[1]) &&
@@ -162,25 +167,41 @@ ValueType get_value_type(const std::string &token) {
   return vLong;
 }
 
-ValuePtr ShuntingYard::paser_value(const std::string &token) {
+Value *ShuntingYard::paser_varible(const std::string &token) {
+  size_t size = token.size();
+  if (token[size - 1] == 'i')
+    return new IntValue(0);
+  if (token[size - 1] == 'l')
+    return new LongValue(0);
+  if (token[size - 1] == 'f')
+    return new FloatValue(0.0);
+  if (token[size - 1] == 'd')
+    return new DoubleValue(0.0);
+  if (token[size - 1] == 's')
+    return new StringValue(get_str_const(std::string("")).c_str());
+  return new Value();
+}
+
+Value *ShuntingYard::paser_value(const std::string &token) {
   // 调用parse_value 必须用is_const 检查
   ValueType vt = get_value_type(token);
   switch (vt) {
   case vString: {
     const char *start = token.c_str() + 1;
     const char *end = token.c_str() + token.size() - 1;
-    return std::make_shared<StringValue>(std::string(start, end));
+    return new StringValue(get_str_const(std::string(start, end)).c_str());
   } break;
-  case vDouble:
-    return std::make_shared<DoubleValue>(strtod(token.c_str(), NULL));
-    break;
+  case vDouble: {
+    double v = strtod(token.c_str(), NULL);
+    return new DoubleValue(v);
+  } break;
   case vLong:
-    return std::make_shared<LongValue>(strtol(token.c_str(), NULL, 10));
+    return new LongValue(strtol(token.c_str(), NULL, 10));
     break;
   default:
     status_log = "error value type";
   };
-  return std::make_shared<Value>();
+  return new Value();
 };
 
 bool ShuntingYard::build_visit_queue(
@@ -304,51 +325,41 @@ bool ShuntingYard::build_visit_queue(
   return true;
 }
 
-NodePtr ShuntingYard::build_expression_tree(
+Node *ShuntingYard::build_expression_tree(
     std::queue<std::pair<std::string, int>> &queue) {
-  std::stack<NodePtr> stack;
+  std::stack<Node *> stack;
   int temporal_varible_index = 0;
 
-  auto process_const = [&](auto &token) {
-    NodePtr node;
-    if (varible_node_map.find(token) != varible_node_map.end()) {
-      node = varible_node_map[token];
-    } else {
-      node = std::make_shared<Node>();
-      node->op_count = -1;
-      // Not used, then cancel
-      // node->result_varible = token;
-      node->value = paser_value(token);
-      //特化下bool，防止输入常量bool时，缓存失效
-      node->bool_value = node->value->get_bool();
-    }
-    varible_node_map[token] = node;
+  auto process_const = [&](const auto &token) {
+    Node *node = new Node();
+    node->op_count = -1;
+    node->result_varible = token;
+    node->value = this->paser_value(token);
+    //特化下bool，防止输入常量bool时，缓存失效
+    node->bool_value = node->value->get_bool();
     stack.push(node);
     return true;
   };
-  auto process_varible = [&](auto &token) {
+  auto process_varible = [&](const auto &token) {
     //如果变量是同一个，就索引
-    NodePtr node;
-    if (varible_node_map.find(token) != varible_node_map.end()) {
-      node = varible_node_map[token];
-    } else {
-      node = std::make_shared<Node>();
-      node->op_count = 0;
-      node->result_varible = token;
-      varible_map[node->result_varible] = &(node->value);
-      varible_node_map[token] = node;
-    }
+    Node *node = new Node();
+    node->op_count = 0;
+    // node->value = paser_varible(token);
+    node->result_varible = token;
+    // varible_map[node->result_varible] = &(node->value);
     stack.push(node);
     return true;
   };
-  auto process_operator = [&](auto &token) {
+  auto process_operator = [&](const auto &token) {
     size_t count = op_arg_count(token);
     if (stack.size() < count)
       return false;
-    NodePtr node = std::make_shared<Node>();
+    Node *node = new Node();
     node->op_count = count;
     node->operator_type = operator_map[token];
-    std::stack<NodePtr> temp_stack;
+    //不存结果
+    // node->value = std::make_shared<BoolValue>(false);
+    std::stack<Node *> temp_stack;
     for (size_t i = 0; i < count; ++i) {
       temp_stack.push(stack.top());
       stack.pop();
@@ -375,31 +386,32 @@ NodePtr ShuntingYard::build_expression_tree(
     if (stack.size() < param_number)
       return false;
 
-    std::stack<NodePtr> temp_stack;
+    std::stack<Node *> temp_stack;
     for (size_t i = 0; i < param_number; ++i) {
       temp_stack.push(stack.top());
       stack.pop();
     }
-    std::vector<ValuePtr> values;
+    std::vector<Value *> values;
     while (!temp_stack.empty()) {
       values.push_back(temp_stack.top()->value);
       temp_stack.pop();
     }
     if (values.size() == 0)
       return false;
-    NodePtr node = std::make_shared<Node>();
+    Node *node = new Node();
     node->op_count = -1;
     if (token == "VEC") {
+      //
       node->value = to_vec_value(values);
       if (node->value->type() == vNull) {
-          status_log = "all value not the same type in VEC";
-          return false;
+        status_log = "all value not the same type in VEC";
+        return false;
       }
     } else if (token == "SET") {
       node->value = to_set_value(values);
       if (node->value->type() == vNull) {
-          status_log = "all value not the same type in SET";
-          return false;
+        status_log = "all value not the same type in SET";
+        return false;
       }
     } else {
       status_log = "not implemented";
@@ -412,11 +424,11 @@ NodePtr ShuntingYard::build_expression_tree(
   auto process_function = [&](auto &token, int param_number) {
     if (stack.size() < param_number)
       return false;
-    NodePtr node = std::make_shared<Node>();
+    Node *node = new Node();
     node->op_count = param_number;
     node->result_varible = token;
     node->operator_type = function_map[param_number];
-    std::stack<NodePtr> temp_stack;
+    std::stack<Node *> temp_stack;
     for (size_t i = 0; i < param_number; ++i) {
       temp_stack.push(stack.top());
       stack.pop();
@@ -444,22 +456,23 @@ NodePtr ShuntingYard::build_expression_tree(
     const std::pair<std::string, int> &token = queue.front();
     if (token.second == tConst) {
       if (!process_const(token.first))
-        return false;
+        return nullptr;
     } else if (token.second == tOperator) {
       if (!process_operator(token.first))
-        return false;
+        return nullptr;
     } else if (token.second == tVarible) {
       if (!process_varible(token.first))
-        return false;
+        return nullptr;
     } else if (token.second >= tFunctionBeginIndex) { //按函数处理
       if (!process_function(token.first, token.second - tFunctionBeginIndex))
-        return false;
+        return nullptr;
     } else if (token.second >= tInnerFunction) {
       //内置函数，转换常量
       if (!process_inner_function(token.first, token.second - tInnerFunction))
-        return false;
+        return nullptr;
     } else {
-      status_log = "eror_type:" + token.first + " " + std::to_string(token.second);
+      status_log =
+          "eror_type:" + token.first + " " + std::to_string(token.second);
     }
     queue.pop();
   }
@@ -469,126 +482,197 @@ NodePtr ShuntingYard::build_expression_tree(
   return nullptr;
 }
 
-void ShuntingYard::op_varible(NodePtr &node) {
-  switch (node->operator_type) {
-  case kNOT:
-    node->bool_value = !node->first->value->get_bool();
-    break;
+Value *ShuntingYard::op_varible(const std::string &result_varible,
+                                OperateType operator_type, Value *value) {
+  switch (operator_type) {
+  case kNOT: {
+    return new BoolValue(value->_not());
+  } break;
   case kFUNC1:
-    node->value = func1_map[node->result_varible](node->first->value);
+    return func1_map[result_varible](value);
     break;
   default:
-    // ADD ERROR TIP
-    node->value = std::make_shared<Value>();
+    status_log += "not support operator";
+    return new Value();
   };
 };
-void ShuntingYard::op_varible_varible(NodePtr &node) {
-  const NodePtr &first = node->first;
-  const NodePtr &second = node->second;
-  switch (node->operator_type) {
+Value *ShuntingYard::op_varible_varible(const std::string &result_varible,
+                                        OperateType operator_type, Value *first,
+                                        Value *second) {
+  switch (operator_type) {
   case kAND: {
-    node->bool_value = first->bool_value && second->bool_value;
+    return new BoolValue(first->_and(second));
   } break;
   case kOR: {
-    node->bool_value = first->bool_value || second->bool_value;
+    return new BoolValue(first->_or(second));
   } break;
-  case kADD:
-    node->value = first->value->add(second->value);
-    break;
-  case kSUB:
-    node->value = first->value->sub(second->value);
-    break;
-  case kMUL:
-    node->value = first->value->mul(second->value);
-    break;
-  case kDIV:
-    node->value = first->value->div(second->value);
-    break;
-  case kMOD:
-    node->value = first->value->mod(second->value);
-    break;
-  case kIN:
-    node->bool_value = second->value->in(first->value);
-    break;
+  case kADD: {
+    Value *result = first->clone();
+    first->add(second, result);
+    return result;
+  } break;
+  case kSUB: {
+    Value *result = first->clone();
+    first->sub(second, result);
+    return result;
+  } break;
+  case kMUL: {
+    Value *result = first->clone();
+    first->mul(second, result);
+    return result;
+  } break;
+  case kDIV: {
+    Value *result = first->clone();
+    first->div(second, result);
+    return result;
+  } break;
+  case kMOD: {
+    Value *result = first->clone();
+    first->mod(second, result);
+    return result;
+  } break;
+  case kIN: {
+    return new BoolValue(second->in(first));
+  } break;
   case kGREATE:
-    node->bool_value = first->value->gt(second->value);
+    return new BoolValue(first->gt(second));
     break;
   case kGREATEOREQUAL:
-    node->bool_value = first->value->gt_or_equal(second->value);
+    return new BoolValue(first->gt_or_equal(second));
     break;
   case kLOWER:
-    node->bool_value = first->value->lt(second->value);
+    return new BoolValue(first->lt(second));
     break;
   case kLOWEROREQUAL:
-    node->bool_value = first->value->lt_or_equal(second->value);
+    return new BoolValue(first->lt_or_equal(second));
     break;
   case kEQUAL:
-    node->bool_value = first->value->equal(second->value);
+    return new BoolValue(first->equal(second));
+    break;
+  case kNOTEQUAL:
+    return new BoolValue(!first->equal(second));
     break;
   case kFUNC2:
-    node->value = func2_map[node->result_varible](node->first->value,
-                                                  node->second->value);
+    return func2_map[result_varible](first, second);
     break;
   default:
     status_log = "not support operator";
-    node->value = std::make_shared<Value>();
   };
+  return new Value();
 }
 
-void ShuntingYard::op_varible_varible_varible(NodePtr &node) {
-  switch (node->operator_type) {
+Value *ShuntingYard::op_varible_varible_varible(
+    const std::string &result_varible, OperateType operator_type, Value *first,
+    Value *second, Value *third) {
+  switch (operator_type) {
   case kFUNC3:
-    node->value = func3_map[node->result_varible](
-        node->first->value, node->second->value, node->third->value);
+    return func3_map[result_varible](first, second, third);
     break;
   default:
-    // ADD ERROR TIP
-    node->value = std::make_shared<Value>();
+    status_log += "not support operator";
   };
+  return new Value();
 };
 
-void ShuntingYard::eval_expression(NodePtr &node) {
-  switch (node->op_count) {
-  case 3: {
-    eval_expression(node->first);
-    eval_expression(node->second);
-    eval_expression(node->third);
-    op_varible_varible_varible(node);
-    return;
+Value *ShuntingYard::find_varible(
+    std::vector<std::pair<const char *, Value *>> &varibles, std::string &key) {
+  const char *_key = key.c_str();
+  for (auto &it : varibles) {
+    if (strcmp(it.first, _key) == 0)
+      return it.second;
   }
+  status_log += "can find varible:" + key;
+  return nullptr;
+}
+Value *ShuntingYard::eval_expression(
+    Node *node, std::vector<std::pair<const char *, Value *>> &varibles) {
+  switch (node->op_count) {
   case 2: {
-    eval_expression(node->first);
-    eval_expression(node->second);
-    op_varible_varible(node);
-    return;
+    Value *first = eval_expression(node->first, varibles);
+    if (!first)
+      return nullptr;
+    Value *second = eval_expression(node->second, varibles);
+    if (!second)
+      return nullptr;
+    Value *result = op_varible_varible(node->result_varible,
+                                       node->operator_type, first, second);
+    if (node->second->op_count > 0) delete second;
+    if (node->first->op_count > 0) delete first;
+    return result;
   } break;
   case 1: {
-    eval_expression(node->first);
-    op_varible(node);
-    return;
+    Value *first = eval_expression(node->first, varibles);
+    if (!first)
+      return nullptr;
+    Value *result =
+        op_varible(node->result_varible, node->operator_type, first);
+    if (node->first->op_count > 0) delete first;
+    return result;
   } break;
-  case 0: //变量取值
+  case 0: {
     //赋值的时候已经初始化完
-    // node->value = varibles[node->result_varible];
-    return;
-    break;
+    Value *v = find_varible(varibles, node->result_varible);
+    if (v != nullptr)
+      return v;
+    return nullptr;
+  } break;
   case -1: //常量在初始化就做好
-    return;
+    return node->value;
     break;
+  case 3: {
+    Value *first = eval_expression(node->first, varibles);
+    if (!first)
+      return nullptr;
+    Value *second = eval_expression(node->second, varibles);
+    if (!second)
+      return nullptr;
+    Value *third = eval_expression(node->third, varibles);
+    if (!third)
+      return nullptr;
+    Value *result = op_varible_varible_varible(
+        node->result_varible, node->operator_type, first, second, third);
+    if (node->third->op_count > 0) delete third;
+    if (node->second->op_count > 0) delete second;
+    if (node->first->op_count > 0) delete first;
+    return result;
+  }
   default:
-    status_log = "error count";
+    status_log += "error count";
   };
+  return nullptr;
 }
 
-bool ShuntingYard::eval_bool() {
-  eval();
-  return expression_root->bool_value;
+void free_map(std::vector<std::pair<const char *, Value *>> &map) {
+  for (auto &it : map) {
+    delete it.second;
+  }
 }
 
-ValuePtr ShuntingYard::eval() {
+bool ShuntingYard::eval_bool(
+    std::vector<std::pair<const char *, Value *>> &varibles) {
   status_log.clear();
-  eval_expression(expression_root);
-  return expression_root->value;
+  Value *v = eval_expression(expression_root, varibles);
+
+  free_map(varibles);
+  if (v == nullptr) {
+    status_log += " return pointer is nullptr";
+    return false;
+  }
+  auto _r = (BoolValue *)v;
+  bool ret = _r->val;
+  delete v;
+  return ret;
+}
+
+Value *
+ShuntingYard::eval(std::vector<std::pair<const char *, Value *>> &varibles) {
+  status_log.clear();
+  Value *v = eval_expression(expression_root, varibles);
+  if (v == nullptr) {
+    status_log += " return pointer is nullptr";
+  }
+  free_map(varibles);
+  return v;
 }
 
 } // namespace parse

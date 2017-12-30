@@ -2,220 +2,130 @@
 #include "parse/parse.h"
 using namespace parse;
 
-TEST(PARSETest, TestParentHesis) {
-    {
-        std::string exp("a==1 and b==2 and c==3");
-        ShuntingYard sy(exp);
-        std::string log;
-        ASSERT_TRUE(sy.compile());
-        ValuePtr a = std::make_shared<LongValue>(1);
-        ValuePtr b = std::make_shared<LongValue>(2);
-        ValuePtr c = std::make_shared<LongValue>(3);
-        std::string _a = "a";
-        std::string _b = "b";
-        std::string _c = "c";
+TEST(PARSETest, TestNode) {
+    Node *node = new Node();
+    delete node;
+    node = new Node();
+    node->first = new Node();
+    node->value = new IntValue(1);
+    delete node;
+}
 
-        sy.set_varible(_a, a);
-        sy.set_varible(_b, b);
-        sy.set_varible(_c, c);
-        ASSERT_TRUE(sy.eval_bool());
+TEST(PARSETest, TestShuntingYardBuild) {
+    std::vector<std::string> exp_is_ok = {
+        "1",
+        "1.0",
+        "\"abc\"",
+        "a==11",
+    };
+    std::vector<std::string> exp_is_fail = {
+        "1a",
+        "1a.0",
+        "\"abc",
+        "abc\"",
+        "1a",
+        "-1",
+        "+1",
+    };
+    for(auto e : exp_is_ok) {
+        std::string exp(e);
+        ShuntingYard *sy = new ShuntingYard(exp);
+        ASSERT_TRUE(sy->compile());
+        delete sy;
+    }
+    for(auto e : exp_is_fail) {
+        std::string exp(e);
+        ShuntingYard *sy = new ShuntingYard(exp);
+        ASSERT_FALSE(sy->compile());
+        delete sy;
+    }
+    std::vector<std::string> exps_is_true = {
+        "1!=2",
+        "1<=2",
+        "1<2",
+        "1.0<2.0",
+        "1.0<=2.0",
+        "not (1>2)",
+        "1==1",
+        "1.0==1.0",
+        "\"a\"==\"a\"",
+        "1.0!=2.0",
+        "\"a\"!=\"b\"",
+    };
+    for(auto e : exps_is_true) {
+        std::string exp(e);
+        ShuntingYard *sy = new ShuntingYard(exp);
+        ASSERT_TRUE(sy->compile());
+        std::vector<std::pair<const char*, Value*>> env ;
+        ASSERT_TRUE(sy->eval_bool(env));
+        delete sy;
+    }
+    std::vector<std::string> exps_diff_type_false = {
+        "1<=2.0",
+        "1<2.0",
+        "1.0<2",
+        "1.0<=2",
+        "1>2.0",
+        "1==1.0",
+        "1.0==1",
+        "\"a\"==1",
+    };
+    for(auto e : exps_diff_type_false) {
+        std::string exp(e);
+        ShuntingYard *sy = new ShuntingYard(exp);
+        ASSERT_TRUE(sy->compile());
+        std::vector<std::pair<const char*, Value*>> env ;
+        ASSERT_FALSE(sy->eval_bool(env));
+        delete sy;
+    }
+    std::vector<std::string> exps_diff_type_true = {
+        "1!=1.0",
+        "1.0!=1",
+        "\"a\"!=1",
+    };
+    for(auto e : exps_diff_type_true) {
+        std::string exp(e);
+        ShuntingYard *sy = new ShuntingYard(exp);
+        ASSERT_TRUE(sy->compile());
+        std::vector<std::pair<const char*, Value*>> env ;
+        ASSERT_TRUE(sy->eval_bool(env));
+        delete sy;
     }
 }
 
-TEST(PARSETest, TestSingleExpresion) {
-    {
-        std::string exp("1");
-        ShuntingYard sy(exp);
-        std::string log;
-        ASSERT_TRUE(sy.compile());
-        ASSERT_TRUE(sy.eval_bool());
+TEST(PARSETest, TestShuntingYardBuildComplicate) {
+    std::vector<std::string> exps_is_true = {
+        "1!=2 and 2>1 and \"a\"!=3 and \"a\" != \"b\"",
+        "(1==2) or (1>0 and \"a\" == \"a\")",
+        "(((((2.0>1.0)))))"
+    };
+    for(auto e : exps_is_true) {
+        std::string exp(e);
+        ShuntingYard *sy = new ShuntingYard(exp);
+        ASSERT_TRUE(sy->compile());
+        std::vector<std::pair<const char*, Value*>> env ;
+        ASSERT_TRUE(sy->eval_bool(env));
+        delete sy;
     }
-    {
-        std::string exp("1.0");
-        ShuntingYard sy(exp);
-        std::string log;
-        ASSERT_TRUE(sy.compile());
-        ASSERT_TRUE(sy.eval_bool());
-    }
-    {
-        std::string exp("\"abc\"");
-        ShuntingYard sy(exp);
-        std::string log;
-        ASSERT_TRUE(sy.compile());
-        ASSERT_TRUE(sy.eval_bool());
-    }
-    {
-        std::string exp("1 and 2");
-        ShuntingYard sy(exp);
-        std::string log;
-        ASSERT_TRUE(sy.compile());
-        ASSERT_TRUE(sy.eval_bool());
-    }
-    {
-        std::string exp("1 or 2");
-        ShuntingYard sy(exp);
-        std::string log;
-        ASSERT_TRUE(sy.compile());
-        ASSERT_TRUE(sy.eval_bool());
-    }
-    {
-        std::string exp("not 1");
-        ShuntingYard sy(exp);
-        std::string log;
-        ASSERT_TRUE(sy.compile());
-        ASSERT_FALSE(sy.eval_bool());
-    }
-    {
-        std::string exp("not 0.0");
-        ShuntingYard sy(exp);
-        std::string log;
-        ASSERT_TRUE(sy.compile());
-        ASSERT_TRUE(sy.eval_bool());
-    }
-    {
-        std::string exp("not 1.0");
-        ShuntingYard sy(exp);
-        std::string log;
-        ASSERT_TRUE(sy.compile());
-        ASSERT_FALSE(sy.eval_bool());
-    }
-    {
-        std::string exp("not \"sb\"");
-        ShuntingYard sy(exp);
-        std::string log;
-        ASSERT_TRUE(sy.compile());
-        ASSERT_FALSE(sy.eval_bool());
-    }
-}
-TEST(PARSETest, TestErrorExpresion) {
-    {
-        std::string exp("(a=1");
-        ShuntingYard sy(exp);
-        std::string log;
-        ASSERT_FALSE(sy.compile());
-    }
-    {
-        std::string exp("a=1)");
-        ShuntingYard sy(exp);
-        std::string log;
-        ASSERT_FALSE(sy.compile());
-    }
-    {
-        std::string exp("a=1");
-        ShuntingYard sy(exp);
-        std::string log;
-        ASSERT_FALSE(sy.compile());
-    }
-    {
-        std::string exp("not");
-        ShuntingYard sy(exp);
-        std::string log;
-        ASSERT_FALSE(sy.compile());
-        std::cout<<log<<"\n";
-    }
-    {
-        std::string exp(" and ");
-        ShuntingYard sy(exp);
-        std::string log;
-        ASSERT_FALSE(sy.compile());
-        std::cout<<log<<"\n";
-    }
-    {
-        std::string exp("or");
-        ShuntingYard sy(exp);
-        std::string log;
-        ASSERT_FALSE(sy.compile());
-        std::cout<<log<<"\n";
-    }
-    {
-        std::string exp("(");
-        ShuntingYard sy(exp);
-        std::string log;
-        ASSERT_FALSE(sy.compile());
-        std::cout<<log<<"\n";
-    }
-    {
-        std::string exp(")");
-        ShuntingYard sy(exp);
-        std::string log;
-        ASSERT_FALSE(sy.compile());
-        std::cout<<log<<"\n";
-    }
-    {
-        std::string exp("[");
-        ShuntingYard sy(exp);
-        std::string log;
-        ASSERT_FALSE(sy.compile());
-        std::cout<<log<<"\n";
-    }
-    {
-        std::string exp("[]");
-        ShuntingYard sy(exp);
-        std::string log;
-        ASSERT_FALSE(sy.compile());
-        std::cout<<log<<"\n";
-    }
+
 }
 
-TEST(PARSETest, TestFunction) {
-    {
-        std::string exp("1 in VEC(1,2,3)");
-        ShuntingYard sy(exp);
-        std::string log;
-        ASSERT_TRUE(sy.compile());
-        sy.eval_bool();
-        std::cout<<sy.get_log()<<"\n";
-        ASSERT_TRUE(sy.eval_bool());
-    }
-    {
-        std::string exp("Abc(1,2,3)");
-        ShuntingYard sy(exp);
-        std::string log;
-        ASSERT_TRUE(sy.compile());
-        auto Abc = [](const ValuePtr& v1, const ValuePtr& v2, const ValuePtr& v3) ->ValuePtr{
-            return std::make_shared<IntValue>(1+2+3);
+TEST(PARSETest, TestShuntingYardBuildVarible) {
+    std::vector<std::string> exps_is_true = {
+        "a!=1",
+        "b!=2",
+        "a>b",
+    };
+    for(auto e : exps_is_true) {
+        std::string exp(e);
+        ShuntingYard *sy = new ShuntingYard(exp);
+        ASSERT_TRUE(sy->compile());
+        std::vector<std::pair<const char*, Value*>> env = {
+            std::make_pair<const char*, Value*>("a",  new IntValue(10)),
+            std::make_pair<const char*, Value*>("b",  new IntValue(5)),
         };
-        sy.set_func3("Abc", Abc);
-      ValuePtr value = sy.eval();
-      auto _v = std::dynamic_pointer_cast<IntValue>(value);
-        ASSERT_TRUE(_v->val == 6);
+        ASSERT_TRUE(sy->eval_bool(env));
+        delete sy;
+    }
 
-    }
-    {
-        std::string exp("1 in Abc(1,2,3)+1");
-        ShuntingYard sy(exp);
-        std::string log;
-        ASSERT_TRUE(sy.compile());
-    }
-    {
-        std::string exp("1 in SET(1,2,3)");
-        ShuntingYard sy(exp);
-        std::string log;
-        ASSERT_TRUE(sy.compile());
-        ASSERT_TRUE(sy.eval_bool());
-    }
-    {
-        std::string exp("1 in SET(2,3)");
-        ShuntingYard sy(exp);
-        std::string log;
-        ASSERT_TRUE(sy.compile());
-        ASSERT_FALSE(sy.eval_bool());
-    }
-    {
-        std::string exp("1 in SET(1,2,3.0)+1");
-        ShuntingYard sy(exp);
-        std::string log;
-        ASSERT_TRUE(sy.compile());
-    }
 }
-
-TEST(PARSETest, TestEvalException) {
-    {
-        std::string exp("1 > 1.0");
-        ShuntingYard sy(exp);
-        std::string log;
-        ASSERT_TRUE(sy.compile());
-        sy.eval();
-    }
-}
-

@@ -1,5 +1,3 @@
-编译环境为blade
-
 以_, a~z 开头的token为变量
 以A~Z 开头的token为函数
 
@@ -10,6 +8,7 @@
 4、in => vector, map, string
 5、function 调用, 参数为1， 2， 3, 返回值为ValuePtr类型
 6、内置VEC、SET函数，用于初始化常量数组、集合
+7、线程安全
 
 
 
@@ -21,37 +20,25 @@
 2、由于动态求值本身问题，输入数值、表达式一定要符合要求
 3、函数调用只限于固定函数参数类型的求解
 
-性能瓶颈：
-1、变量构造、赋值（class 类型）
-2、switch不利于cpu指令流水
+目前的性能瓶颈：
+1、动态对象申请
 
 使用方法:
-    std::vector<std::string> langs = {"en", "ch", "jp", "ab", "us", ""};
-    std::string exp("lang == \"en\" and hour in SET(8,12, 14, 19) and region == \"jp\"");
+    std::string exp("a < 7 and b < 4 and not c");
     ShuntingYard sy(exp);
-    ASSERT_TRUE(sy.compile());
-    //sy.get_log() 如果编译有错，可以调用get_log得到错误信息
-    std::cout<<sy.get_log()<<"\n";
-    //声明变量占位符
-    ValuePtr lang = std::make_shared<StringValue>("");
-    ValuePtr region = std::make_shared<StringValue>("");
-    ValuePtr hour = std::make_shared<LongValue>(0);;
-    //变量字符串名
-    std::string _lang = "lang";
-    std::string _reigon = "region";
-    std::string _hour = "hour";
-    //预先绑定
-    sy.set_varible(_lang, lang);
-    sy.set_varible(_reigon, region);
-    sy.set_varible(_hour, hour);
-
+    sy.compile();
+    int t = 0;
     for (size_t i = 0; i < count; ++i) {
-        //执行时，只需设置下需要更新的字段
-        std::dynamic_pointer_cast<StringValue>(lang)->val = langs[i%6];
-        std::dynamic_pointer_cast<StringValue>(region)->val = "jp";
-        std::dynamic_pointer_cast<LongValue>(hour)->val = 14;
-        //求值
-        ValuePtr value = sy.eval();
+        std::vector<std::pair<const char*, Value*>> env = {
+            std::make_pair<const char*, Value*>("a",  new LongValue(i%7)),
+            std::make_pair<const char*, Value*>("b",  new LongValue(i%7)),
+            std::make_pair<const char*, Value*>("c",  new BoolValue(false)),
+        };
+        t+= sy.eval_bool(env);
     }
+    std::cout<<"parse  eval:"<<exp<<", loop:"<<t<<"\n";
 
-上述例子的耗时为：count=1百万时，耗时253毫秒
+上述例子的耗时为：count=1百万时，耗时653毫秒
+
+TODO:
+减少动态内存申请
