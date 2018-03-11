@@ -34,7 +34,10 @@
             std::make_pair<const char*, Value*>("b",  new LongValue(i%7)),
             std::make_pair<const char*, Value*>("c",  new BoolValue(false)),
         };
-        t+= sy.eval_bool(env);
+        std::string log;
+        t+= sy.eval_bool(env, log); //传入的env指针会自动释放，目前没有考虑指针重复问题，传入时需谨慎
+        // 要检查log是否为空(传入的数值类型不对会触发异常)
+        assert(log.emtpy());
     }
     std::cout<<"parse  eval:"<<exp<<", loop:"<<t<<"\n";
 

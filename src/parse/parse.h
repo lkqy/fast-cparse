@@ -90,21 +90,21 @@ private:
   Node *build_expression_tree(std::queue<std::pair<std::string, int>> &queue);
 
   Value *op_varible(const std::string &result_varible,
-                    OperateType operator_type, Value *value);
+                    OperateType operator_type, Value *value, std::string& log);
   inline Value *op_varible_varible(const std::string &result_varible,
                                    OperateType operator_type, Value *first,
-                                   Value *second);
+                                   Value *second, std::string& log);
   inline Value *op_varible_varible_varible(const std::string &result_varible,
                                            OperateType operator_type,
                                            Value *first, Value *second,
-                                           Value *third);
+                                           Value *third, std::string& log);
 
   inline Value *
   eval_expression(Node *node,
-                  std::vector<std::pair<const char *, Value *>> &varibles);
+                  std::vector<std::pair<const char *, Value *>> &varibles, std::string& log);
 
   Value *find_varible(std::vector<std::pair<const char *, Value *>> &varibles,
-                      std::string &key);
+                      std::string &key, std::string& log);
 
 public:
   ShuntingYard(const std::string &e);
@@ -117,16 +117,13 @@ public:
   //返回表达式是否正常
   bool compile();
 
-  bool eval_bool(std::vector<std::pair<const char *, Value *>> &varibles);
+  bool eval_bool(std::vector<std::pair<const char *, Value *>> &varibles, std::string& log);
+  int eval_int(std::vector<std::pair<const char *, Value *>> &varibles, std::string& log);
+  long eval_long(std::vector<std::pair<const char *, Value *>> &varibles, std::string& log);
+  float eval_float(std::vector<std::pair<const char *, Value *>> &varibles, std::string& log);
+  double eval_double(std::vector<std::pair<const char *, Value *>> &varibles, std::string& log);
 
-  Value *eval(std::vector<std::pair<const char *, Value *>> &varibles);
-
-  void set_varible(const std::string &key, ValuePtr &value) {
-    const auto &it = varible_map.find(key);
-    if (it == varible_map.end())
-      return;
-    *(it->second) = value;
-  };
+  Value *eval(std::vector<std::pair<const char *, Value *>> &varibles, std::string& log);
 
   void set_func1(std::string key, BindFunc1 f) { func1_map[key] = f; };
   void set_func2(std::string key, BindFunc2 f) { func2_map[key] = f; };
@@ -137,8 +134,10 @@ public:
     const_strings.push_back(str);
     return const_strings[const_strings.size() - 1];
   };
+  std::string get_expression() {return expression;};
 
 private:
+  Value *_eval(std::vector<std::pair<const char *, Value *>> &varibles, std::string& log);
   //操作符
   std::unordered_map<std::string, OperateType> operator_map = {
       {"+", kADD},           {"-", kSUB},    {"*", kMUL},
@@ -159,7 +158,6 @@ private:
   std::string expression;
 
   //变量，初始化索引到表达式树上，以省去访问map的时间
-  std::map<std::string, ValuePtr *> varible_map;
   std::vector<std::string> const_strings;
 
   std::unordered_map<std::string, BindFunc1> func1_map;

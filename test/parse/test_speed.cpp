@@ -16,6 +16,7 @@ void test_user_recall(size_t count) {
     std::string _hour = "hour";
     std::string en = "en";
     std::string jp = "jp";
+    std::string log;
 
     for (size_t i = 0; i < count; ++i) {
         std::vector<std::pair<const char*, Value*>> env = {
@@ -23,7 +24,7 @@ void test_user_recall(size_t count) {
             std::make_pair<const char*, Value*>(_region.c_str(),  new StringValue(jp.c_str())),
         };
 
-        t+= sy.eval_bool(env);
+        t+= sy.eval_bool(env, log);
     }
     std::cout<<"parse  eval:"<<exp<<", loop:"<<t<<"\n";
 }
@@ -36,6 +37,7 @@ void test_frequency_control_1(size_t count) {
     std::string va("today_send");
     std::string vb("today_show");
     std::string vc("today_active");
+    std::string log;
 
     for (size_t i = 0; i < count; ++i) {
         std::vector<std::pair<const char*, Value*>> env = {
@@ -44,7 +46,7 @@ void test_frequency_control_1(size_t count) {
             std::make_pair<const char*, Value*>("today_active",  new BoolValue(false)),
         };
 
-        t+= sy.eval_bool(env);
+        t+= sy.eval_bool(env, log);
     }
     std::cout<<"parse  eval:"<<exp<<", loop:"<<t<<"\n";
 }
@@ -62,6 +64,7 @@ void test_frequency_control_2(size_t count) {
     ValuePtr b = std::make_shared<LongValue>(1);
     ValuePtr c = std::make_shared<BoolValue>(2 == 1);;
     ValuePtr d = std::make_shared<LongValue>(3);
+    std::string log;
 
     for (size_t i = 0; i < count; ++i) {
         std::vector<std::pair<const char*, Value*>> env = {
@@ -70,7 +73,7 @@ void test_frequency_control_2(size_t count) {
             std::make_pair<const char*, Value*>("c",  new BoolValue(false)),
         };
 
-        t+= sy.eval_bool(env);
+        t+= sy.eval_bool(env, log);
     }
     std::cout<<"parse  eval:"<<exp<<", loop:"<<t<<"\n";
 }
@@ -83,6 +86,7 @@ void test_frequency_control_3(size_t count) {
     std::string va("today_send");
     std::string vb("today_show");
     std::string vc("today_active");
+    std::string log;
 
     for (size_t i = 0; i < count; ++i) {
         std::vector<std::pair<const char*, Value*>> env = {
@@ -91,7 +95,7 @@ void test_frequency_control_3(size_t count) {
             std::make_pair<const char*, Value*>("today_active",  new BoolValue(false)),
         };
 
-        t+= sy.eval_bool(env);
+        t+= sy.eval_bool(env, log);
     }
     std::cout<<"parse  eval:"<<exp<<", loop:"<<t<<"\n";
 }
@@ -104,6 +108,7 @@ void test_frequency_control_4(size_t count) {
     std::string va("today_send");
     std::string vb("today_show");
     std::string vc("today_active");
+    std::string log;
 
     for (size_t i = 0; i < count; ++i) {
         std::vector<std::pair<const char*, Value*>> env = {
@@ -112,7 +117,28 @@ void test_frequency_control_4(size_t count) {
             std::make_pair<const char*, Value*>("today_active",  new BoolValue(false)),
         };
 
-        t+= sy.eval_bool(env);
+        t+= sy.eval_bool(env, log);
+    }
+    std::cout<<"parse  eval:"<<exp<<", loop:"<<t<<"\n";
+}
+void test_frequency_control_5(size_t count) {
+    //std::string exp("(lang == \"jp\" and tz_hour in VEC(8, 12, 18)) or (lang==\"us\" and tz_hour in VEC(11, 15, 21)) or not (lang in VEC(\"jp\", \"us\"))");
+    std::string exp("(lang == \"jp1\" and tz_hour in VEC(8, 12, 18)) or (lang==\"us\" and tz_hour in VEC(11, 15, 21)) or not (lang in VEC(\"jp1\", \"us\"))");
+    ShuntingYard sy(exp);
+    sy.compile();
+    int t = 0;
+    std::string va("today_send");
+    std::string vb("today_show");
+    std::string vc("today_active");
+    std::string log;
+
+    for (size_t i = 0; i < count; ++i) {
+        std::vector<std::pair<const char*, Value*>> env = {
+            std::make_pair<const char*, Value*>("tz_hour",  new LongValue(1)),
+            std::make_pair<const char*, Value*>("lang",  new StringValue("jp1")),
+        };
+
+        t+= sy.eval_bool(env, log);
     }
     std::cout<<"parse  eval:"<<exp<<", loop:"<<t<<"\n";
 }
@@ -146,6 +172,12 @@ TEST(PARSETest, TestPerformance) {
     {
         clock_t start = clock();
         test_frequency_control_4(count);
+        clock_t end = clock();
+        std::cout<<"user recall cost:"<<(float)(end-start)/CLOCKS_PER_SEC<<"\n";
+    }
+    {
+        clock_t start = clock();
+        test_frequency_control_5(count);
         clock_t end = clock();
         std::cout<<"user recall cost:"<<(float)(end-start)/CLOCKS_PER_SEC<<"\n";
     }

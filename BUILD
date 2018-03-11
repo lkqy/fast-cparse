@@ -24,6 +24,16 @@ cc_library(
     link_all_symbols=True,
 )
 
+cc_binary(
+    name="parse_bin",
+    srcs=[
+        "src/parse/*.cpp",
+    ],
+    incs=common_incs,
+    deps=common_deps,
+    extra_cppflags=common_cppflags,
+)
+
 cc_test(
     name="parse_unit_test",
     srcs=[
@@ -36,6 +46,5 @@ cc_test(
     testdata=[
     ],
     extra_cppflags=common_cppflags,
-    bundle_path="/opt/tiger/pps_parse_bin/lib",
 )
 

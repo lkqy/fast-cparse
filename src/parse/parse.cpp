@@ -281,7 +281,7 @@ bool ShuntingYard::build_visit_queue(
         }
       }
       if (!find) {
-        status_log = "Error: function parentheses mismatched";
+        status_log += "Error: function parentheses mismatched";
         return false;
       }
     } else if (token == "(") {
@@ -299,7 +299,7 @@ bool ShuntingYard::build_visit_queue(
         }
       }
       if (!find) {
-        status_log = "Error: parentheses mismatched";
+        status_log += "Error: parentheses mismatched";
         return false;
       }
       if (!stack.empty()) {
@@ -310,13 +310,13 @@ bool ShuntingYard::build_visit_queue(
         }
       }
     } else {
-      status_log = "error expression: unkonw token:" + token;
+      status_log += "error expression: unkonw token:" + token;
       return false;
     }
   }
   while (!stack.empty()) {
     if (stack.top().first == "(" || stack.top().first == ")") {
-      status_log = "Error: parentheses mismatched";
+      status_log += "Error: parentheses mismatched";
       return false;
     }
     queue.push(stack.top());
@@ -346,7 +346,6 @@ Node *ShuntingYard::build_expression_tree(
     node->op_count = 0;
     // node->value = paser_varible(token);
     node->result_varible = token;
-    // varible_map[node->result_varible] = &(node->value);
     stack.push(node);
     return true;
   };
@@ -383,11 +382,12 @@ Node *ShuntingYard::build_expression_tree(
 
   //内置函数都是常量表达式
   auto process_inner_function = [&](auto &token, int param_number) {
-    if (stack.size() < param_number)
+    long stack_size = stack.size();
+    if (stack_size < param_number)
       return false;
 
     std::stack<Node *> temp_stack;
-    for (size_t i = 0; i < param_number; ++i) {
+    for (int i = 0; i < param_number; ++i) {
       temp_stack.push(stack.top());
       stack.pop();
     }
@@ -422,14 +422,15 @@ Node *ShuntingYard::build_expression_tree(
   };
 
   auto process_function = [&](auto &token, int param_number) {
-    if (stack.size() < param_number)
+    long stack_size = stack.size();
+    if (stack_size < param_number)
       return false;
     Node *node = new Node();
     node->op_count = param_number;
     node->result_varible = token;
     node->operator_type = function_map[param_number];
     std::stack<Node *> temp_stack;
-    for (size_t i = 0; i < param_number; ++i) {
+    for (int i = 0; i < param_number; ++i) {
       temp_stack.push(stack.top());
       stack.pop();
     }
@@ -483,7 +484,7 @@ Node *ShuntingYard::build_expression_tree(
 }
 
 Value *ShuntingYard::op_varible(const std::string &result_varible,
-                                OperateType operator_type, Value *value) {
+                                OperateType operator_type, Value *value, std::string& log) {
   switch (operator_type) {
   case kNOT: {
     return new BoolValue(value->_not());
@@ -492,13 +493,13 @@ Value *ShuntingYard::op_varible(const std::string &result_varible,
     return func1_map[result_varible](value);
     break;
   default:
-    status_log += "not support operator";
+    log += "not support operator";
     return new Value();
   };
 };
 Value *ShuntingYard::op_varible_varible(const std::string &result_varible,
                                         OperateType operator_type, Value *first,
-                                        Value *second) {
+                                        Value *second, std::string& log) {
   switch (operator_type) {
   case kAND: {
     return new BoolValue(first->_and(second));
@@ -556,62 +557,62 @@ Value *ShuntingYard::op_varible_varible(const std::string &result_varible,
     return func2_map[result_varible](first, second);
     break;
   default:
-    status_log = "not support operator";
+    log += "not support operator";
   };
   return new Value();
 }
 
 Value *ShuntingYard::op_varible_varible_varible(
     const std::string &result_varible, OperateType operator_type, Value *first,
-    Value *second, Value *third) {
+    Value *second, Value *third, std::string& log) {
   switch (operator_type) {
   case kFUNC3:
     return func3_map[result_varible](first, second, third);
     break;
   default:
-    status_log += "not support operator";
+    log += "not support operator";
   };
   return new Value();
 };
 
 Value *ShuntingYard::find_varible(
-    std::vector<std::pair<const char *, Value *>> &varibles, std::string &key) {
+    std::vector<std::pair<const char *, Value *>> &varibles, std::string &key, std::string& log) {
   const char *_key = key.c_str();
   for (auto &it : varibles) {
     if (strcmp(it.first, _key) == 0)
       return it.second;
   }
-  status_log += "can find varible:" + key;
+  log += "can find varible:" + key;
   return nullptr;
 }
 Value *ShuntingYard::eval_expression(
-    Node *node, std::vector<std::pair<const char *, Value *>> &varibles) {
+    Node *node, std::vector<std::pair<const char *, Value *>> &varibles, std::string& log) {
   switch (node->op_count) {
   case 2: {
-    Value *first = eval_expression(node->first, varibles);
+    Value *first = eval_expression(node->first, varibles, log);
     if (!first)
       return nullptr;
-    Value *second = eval_expression(node->second, varibles);
+    Value *second = eval_expression(node->second, varibles, log);
     if (!second)
       return nullptr;
     Value *result = op_varible_varible(node->result_varible,
-                                       node->operator_type, first, second);
+                                       node->operator_type, first, second, log);
     if (node->second->op_count > 0) delete second;
     if (node->first->op_count > 0) delete first;
     return result;
   } break;
   case 1: {
-    Value *first = eval_expression(node->first, varibles);
+    Value *first = eval_expression(node->first, varibles, log);
     if (!first)
       return nullptr;
     Value *result =
-        op_varible(node->result_varible, node->operator_type, first);
+        op_varible(node->result_varible, node->operator_type, first, log);
     if (node->first->op_count > 0) delete first;
     return result;
   } break;
   case 0: {
     //赋值的时候已经初始化完
-    Value *v = find_varible(varibles, node->result_varible);
+    Value *v = find_varible(varibles, node->result_varible, log);
     if (v != nullptr)
       return v;
     return nullptr;
@@ -620,24 +621,24 @@ Value *ShuntingYard::eval_expression(
     return node->value;
     break;
   case 3: {
-    Value *first = eval_expression(node->first, varibles);
+    Value *first = eval_expression(node->first, varibles, log);
     if (!first)
       return nullptr;
-    Value *second = eval_expression(node->second, varibles);
+    Value *second = eval_expression(node->second, varibles, log);
     if (!second)
       return nullptr;
-    Value *third = eval_expression(node->third, varibles);
+    Value *third = eval_expression(node->third, varibles, log);
     if (!third)
       return nullptr;
     Value *result = op_varible_varible_varible(
-        node->result_varible, node->operator_type, first, second, third);
+        node->result_varible, node->operator_type, first, second, third, log);
     if (node->third->op_count > 0) delete third;
     if (node->second->op_count > 0) delete second;
     if (node->first->op_count > 0) delete first;
     return result;
   }
   default:
-    status_log += "error count";
+    log += "error count";
   };
   return nullptr;
 }
@@ -649,13 +650,12 @@ void free_map(std::vector<std::pair<const char *, Value *>> &map) {
 }
 
 bool ShuntingYard::eval_bool(
-    std::vector<std::pair<const char *, Value *>> &varibles) {
-  status_log.clear();
-  Value *v = eval_expression(expression_root, varibles);
+    std::vector<std::pair<const char *, Value *>> &varibles, std::string& log) {
+  Value *v = eval_expression(expression_root, varibles, log);
 
   free_map(varibles);
   if (v == nullptr) {
-    status_log += " return pointer is nullptr";
+    log += " return pointer is nullptr";
     return false;
   }
   auto _r = (BoolValue *)v;
@@ -665,14 +665,58 @@ bool ShuntingYard::eval_bool(
 }
 
 Value *
-ShuntingYard::eval(std::vector<std::pair<const char *, Value *>> &varibles) {
-  status_log.clear();
-  Value *v = eval_expression(expression_root, varibles);
+ShuntingYard::_eval(std::vector<std::pair<const char *, Value *>> &varibles, std::string& log) {
+  Value *v = eval_expression(expression_root, varibles, log);
   if (v == nullptr) {
-    status_log += " return pointer is nullptr";
+    log += " return pointer is nullptr";
   }
+  return v;
+}
+Value *
+ShuntingYard::eval(std::vector<std::pair<const char *, Value *>> &varibles, std::string& log) {
+  Value *v = _eval(varibles, log);
   free_map(varibles);
   return v;
+}
+
+int ShuntingYard::eval_int(std::vector<std::pair<const char *, Value *>> &varibles, std::string& log) {
+    Value *v = _eval(varibles, log);
+    int ret = 0;
+    if (v != nullptr) {
+        ret = ((IntValue *)v)->val;
+    }
+    free_map(varibles);
+    return ret;
+}
+
+long ShuntingYard::eval_long(std::vector<std::pair<const char *, Value *>> &varibles, std::string& log) {
+    Value *v = _eval(varibles, log);
+    long ret = 0;
+    if (v != nullptr) {
+        ret = ((LongValue *)v)->val;
+    }
+    free_map(varibles);
+    return ret;
+}
+
+float ShuntingYard::eval_float(std::vector<std::pair<const char *, Value *>> &varibles, std::string& log) {
+    Value *v = _eval(varibles, log);
+    float ret = 0;
+    if (v != nullptr) {
+        ret = ((FloatValue *)v)->val;
+    }
+    free_map(varibles);
+    return ret;
+}
+
+double ShuntingYard::eval_double(std::vector<std::pair<const char *, Value *>> &varibles, std::string& log) {
+    Value *v = _eval(varibles, log);
+    double ret = 0;
+    if (v != nullptr) {
+        ret = ((DoubleValue *)v)->val;
+    }
+    free_map(varibles);
+    return ret;
 }
 
 } // namespace parse
