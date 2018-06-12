@@ -24,17 +24,19 @@ bool ShuntingYard::compile() {
   }
 }
 
-int ShuntingYard::get_token_type(char c) {
+int ShuntingYard::get_token_type(char c, int pre_type) {
   //暂时不考虑+2， -1这种case
   //这里简单实现同数字的字符可以互相结合，比如=====, +++++++  是一个运算符
+  // 解析有顺序，不可以更换顺序
+  if (isalpha(c) || c == '_' || (pre_type == 4 && isdigit(c))) {
+    return 4;
+  }
   if (c == '+' || c == '-' || c == '*' || c == '/' || c == '%')
     return 1;
   if (c == '>' || c == '<' || c == '=' || c == '!')
     return 2;
   if (isdigit(c) || c == '.')
     return 3;
-  if (isalpha(c) || c == '_')
-    return 4;
   if (c == ',')
     return 5;
   return 6;
@@ -88,6 +90,7 @@ std::string ShuntingYard::next_token(const char *input,
   if (is_terminate(*start_input))
     return std::string("");
   const char *start_token = start_input;
+
   //如果是字符串，需要提取正确的
   if (*start_input == '"') {
     ++start_input;
@@ -107,8 +110,8 @@ std::string ShuntingYard::next_token(const char *input,
     *next_token = start_input;
     return std::string(start_token, start_input);
   } else {
-    int type = get_token_type(*start_input);
-    while (*start_input && type == get_token_type(*start_input))
+    int type = get_token_type(*start_input, -1000);
+    while (*start_input && type == get_token_type(*start_input, type))
       ++start_input;
     *next_token = start_input;
     return std::string(start_token, start_input);
@@ -484,7 +487,8 @@ Node *ShuntingYard::build_expression_tree(
 }
 
 Value *ShuntingYard::op_varible(const std::string &result_varible,
-                                OperateType operator_type, Value *value, std::string& log) {
+                                OperateType operator_type, Value *value,
+                                std::string &log) {
   switch (operator_type) {
   case kNOT: {
     return new BoolValue(value->_not());
@@ -499,7 +503,7 @@ Value *ShuntingYard::op_varible(const std::string &result_varible,
 };
 Value *ShuntingYard::op_varible_varible(const std::string &result_varible,
                                         OperateType operator_type, Value *first,
-                                        Value *second, std::string& log) {
+                                        Value *second, std::string &log) {
   switch (operator_type) {
   case kAND: {
     return new BoolValue(first->_and(second));
@@ -564,7 +568,7 @@ Value *ShuntingYard::op_varible_varible(const std::string &result_varible,
 
 Value *ShuntingYard::op_varible_varible_varible(
     const std::string &result_varible, OperateType operator_type, Value *first,
-    Value *second, Value *third, std::string& log) {
+    Value *second, Value *third, std::string &log) {
   switch (operator_type) {
   case kFUNC3:
     return func3_map[result_varible](first, second, third);
@@ -576,7 +580,8 @@ Value *ShuntingYard::op_varible_varible_varible(
 };
 
 Value *ShuntingYard::find_varible(
-    std::vector<std::pair<const char *, Value *>> &varibles, std::string &key, std::string& log) {
+    std::vector<std::pair<const char *, Value *>> &varibles, std::string &key,
+    std::string &log) {
   const char *_key = key.c_str();
   for (auto &it : varibles) {
     if (strcmp(it.first, _key) == 0)
@@ -586,7 +591,8 @@ Value *ShuntingYard::find_varible(
   return nullptr;
 }
 Value *ShuntingYard::eval_expression(
-    Node *node, std::vector<std::pair<const char *, Value *>> &varibles, std::string& log) {
+    Node *node, std::vector<std::pair<const char *, Value *>> &varibles,
+    std::string &log) {
   switch (node->op_count) {
   case 2: {
     Value *first = eval_expression(node->first, varibles, log);
@@ -597,8 +603,10 @@ Value *ShuntingYard::eval_expression(
       return nullptr;
     Value *result = op_varible_varible(node->result_varible,
                                        node->operator_type, first, second, log);
-    if (node->second->op_count > 0) delete second;
-    if (node->first->op_count > 0) delete first;
+    if (node->second->op_count > 0)
+      delete second;
+    if (node->first->op_count > 0)
+      delete first;
     return result;
   } break;
   case 1: {
@@ -607,7 +615,8 @@ Value *ShuntingYard::eval_expression(
       return nullptr;
     Value *result =
         op_varible(node->result_varible, node->operator_type, first, log);
-    if (node->first->op_count > 0) delete first;
+    if (node->first->op_count > 0)
+      delete first;
     return result;
   } break;
   case 0: {
@@ -632,9 +641,12 @@ Value *ShuntingYard::eval_expression(
       return nullptr;
     Value *result = op_varible_varible_varible(
         node->result_varible, node->operator_type, first, second, third, log);
-    if (node->third->op_count > 0) delete third;
-    if (node->second->op_count > 0) delete second;
-    if (node->first->op_count > 0) delete first;
+    if (node->third->op_count > 0)
+      delete third;
+    if (node->second->op_count > 0)
+      delete second;
+    if (node->first->op_count > 0)
+      delete first;
     return result;
   }
   default:
@@ -649,8 +661,14 @@ void free_map(std::vector<std::pair<const char *, Value *>> &map) {
   }
 }
 
+void ShuntingYard::free_result(Value *v) {
+  if (expression_root->op_count != 0 && expression_root->op_count != -1 && v) {
+    delete v;
+  }
+}
+
 bool ShuntingYard::eval_bool(
-    std::vector<std::pair<const char *, Value *>> &varibles, std::string& log) {
+    std::vector<std::pair<const char *, Value *>> &varibles, std::string &log) {
   Value *v = eval_expression(expression_root, varibles, log);
 
   free_map(varibles);
@@ -660,12 +678,13 @@ bool ShuntingYard::eval_bool(
   }
   auto _r = (BoolValue *)v;
   bool ret = _r->val;
-  delete v;
+  free_result(v);
   return ret;
 }
 
 Value *
-ShuntingYard::_eval(std::vector<std::pair<const char *, Value *>> &varibles, std::string& log) {
+ShuntingYard::_eval(std::vector<std::pair<const char *, Value *>> &varibles,
+                    std::string &log) {
   Value *v = eval_expression(expression_root, varibles, log);
   if (v == nullptr) {
     log += " return pointer is nullptr";
@@ -673,50 +692,59 @@ ShuntingYard::_eval(std::vector<std::pair<const char *, Value *>> &varibles, std
   return v;
 }
 Value *
-ShuntingYard::eval(std::vector<std::pair<const char *, Value *>> &varibles, std::string& log) {
+ShuntingYard::eval(std::vector<std::pair<const char *, Value *>> &varibles,
+                   std::string &log) {
   Value *v = _eval(varibles, log);
   free_map(varibles);
   return v;
 }
 
-int ShuntingYard::eval_int(std::vector<std::pair<const char *, Value *>> &varibles, std::string& log) {
-    Value *v = _eval(varibles, log);
-    int ret = 0;
-    if (v != nullptr) {
-        ret = ((IntValue *)v)->val;
-    }
-    free_map(varibles);
-    return ret;
+int ShuntingYard::eval_int(
+    std::vector<std::pair<const char *, Value *>> &varibles, std::string &log) {
+  Value *v = _eval(varibles, log);
+  int ret = 0;
+  if (v != nullptr) {
+    ret = ((IntValue *)v)->val;
+    free_result(v);
+  }
+  free_map(varibles);
+  return ret;
 }
 
-long ShuntingYard::eval_long(std::vector<std::pair<const char *, Value *>> &varibles, std::string& log) {
-    Value *v = _eval(varibles, log);
-    long ret = 0;
-    if (v != nullptr) {
-        ret = ((LongValue *)v)->val;
-    }
-    free_map(varibles);
-    return ret;
+long ShuntingYard::eval_long(
+    std::vector<std::pair<const char *, Value *>> &varibles, std::string &log) {
+  Value *v = _eval(varibles, log);
+  long ret = 0;
+  if (v != nullptr) {
+    ret = ((LongValue *)v)->val;
+    free_result(v);
+  }
+  free_map(varibles);
+  return ret;
 }
 
-float ShuntingYard::eval_float(std::vector<std::pair<const char *, Value *>> &varibles, std::string& log) {
-    Value *v = _eval(varibles, log);
-    float ret = 0;
-    if (v != nullptr) {
-        ret = ((FloatValue *)v)->val;
-    }
-    free_map(varibles);
-    return ret;
+float ShuntingYard::eval_float(
+    std::vector<std::pair<const char *, Value *>> &varibles, std::string &log) {
+  Value *v = _eval(varibles, log);
+  float ret = 0;
+  if (v != nullptr) {
+    ret = ((FloatValue *)v)->val;
+    free_result(v);
+  }
+  free_map(varibles);
+  return ret;
 }
 
-double ShuntingYard::eval_double(std::vector<std::pair<const char *, Value *>> &varibles, std::string& log) {
-    Value *v = _eval(varibles, log);
-    double ret = 0;
-    if (v != nullptr) {
-        ret = ((DoubleValue *)v)->val;
-    }
-    free_map(varibles);
-    return ret;
+double ShuntingYard::eval_double(
+    std::vector<std::pair<const char *, Value *>> &varibles, std::string &log) {
+  Value *v = _eval(varibles, log);
+  double ret = 0;
+  if (v != nullptr) {
+    ret = ((DoubleValue *)v)->val;
+    free_result(v);
+  }
+  free_map(varibles);
+  return ret;
 }
 
 } // namespace parse

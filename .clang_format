@@ -1,0 +1,31 @@
+IndentWidth: 4
+TabWidth: 4
+
+Language: Cpp
+BasedOnStyle: Google
+ColumnLimit: 120
+Standard: C++11
+# indent
+AccessModifierOffset: -4
+ContinuationIndentWidth: 8
+# align
+AlignOperands: false
+AlignAfterOpenBracket: DontAlign
+BreakBeforeTernaryOperators: true
+BreakBeforeBinaryOperators: true
+# constructor
+BreakConstructorInitializersBeforeComma: false
+ConstructorInitializerIndentWidth: 8
+ConstructorInitializerAllOnOneLineOrOnePerLine: true
+# short block
+AllowShortBlocksOnASingleLine: false
+AllowShortCaseLabelsOnASingleLine: false
+AllowShortFunctionsOnASingleLine: None
+AllowShortIfStatementsOnASingleLine: false
+AllowShortLoopsOnASingleLine: false
+# other
+AlwaysBreakTemplateDeclarations: true
+PointerAlignment: Left
+SortIncludes: false
+BreakStringLiterals: false
+ReflowComments: true

@@ -142,6 +142,8 @@ void test_frequency_control_5(size_t count) {
     }
     std::cout<<"parse  eval:"<<exp<<", loop:"<<t<<"\n";
 }
+
+
 TEST(PARSETest, TestPerformance) {
     size_t count = 1000001;
 
@@ -181,6 +183,37 @@ TEST(PARSETest, TestPerformance) {
         clock_t end = clock();
         std::cout<<"user recall cost:"<<(float)(end-start)/CLOCKS_PER_SEC<<"\n";
     }
+}
+
+
+
+TEST(PARSETest, TestDoublePerformance) {
+    clock_t start = clock();
+    size_t count = 10000000;
+    std::string exp("model1 * model2 + model3 * 0.01");
+    ShuntingYard sy(exp);
+    sy.compile();
+    double t = 0;
+    std::string va("model1");
+    std::string vb("model2");
+    std::string vc("model3");
+
+    for (size_t i = 0; i < count; ++i) {
+        std::vector<std::pair<const char*, Value*>> env = {
+            std::make_pair<const char*, Value*>(va.c_str(),  new DoubleValue(1.0)),
+            std::make_pair<const char*, Value*>(vb.c_str(),  new DoubleValue(0.1)),
+            std::make_pair<const char*, Value*>(vc.c_str(),  new DoubleValue(0.01)),
+        };
+        std::string log;
+        t+= sy.eval_double(env, log);
+        if(!log.empty()) {
+            std::cout<<"error:"<<log<<"\n";
+        }
+
+    }
+    std::cout<<"parse  eval:"<<exp<<", loop:"<<t<<"\n";
+    clock_t end = clock();
+    std::cout<<"user recall cost:"<<(float)(end-start)/CLOCKS_PER_SEC<<"\n";
 }
 
 

@@ -51,7 +51,7 @@ TEST(PARSETest, TestShuntingYardBuild) {
         "1.0==1.0",
         "\"a\"==\"a\"",
         "1.0!=2.0",
-        "\"a\"!=\"b\""
+        "\"a\"!=\"b\"",
     };
     std::string log;
     for(auto e : exps_is_true) {
@@ -68,6 +68,7 @@ TEST(PARSETest, TestShuntingYardBuild) {
         "1.0<2",
         "1.0<=2",
         "1>2.0",
+        "1>2",
         "1==1.0",
         "1.0==1",
         "\"a\"==1",
@@ -117,6 +118,7 @@ TEST(PARSETest, TestShuntingYardBuildVarible) {
     std::vector<std::string> exps_is_true = {
         "a!=1",
         "b!=2",
+        "not( lang in VEC(\"ja\", \"vi\", \"in\"))",
         "a>b",
         "local_hour in VEC(10, 11, 12)",
         "(lang == \"jp\" and tz_hour in VEC(8, 12, 18)) or (lang==\"us\" and tz_hour in VEC(11, 15, 21)) or not (lang in VEC(\"jp\", \"us\"))",
@@ -135,6 +137,10 @@ TEST(PARSETest, TestShuntingYardBuildVarible) {
             std::make_pair<const char*, Value*>("tz_hour",  new LongValue(12)),
             std::make_pair<const char*, Value*>("lang",  new StringValue("jp")),
         };
+        for(auto& it : env) {
+            std::cout<<it.first<<", "<<it.second->to_string()<<"\n";
+        }
+
         ASSERT_TRUE(sy->eval_bool(env, log));
         delete sy;
     }
@@ -184,6 +190,16 @@ TEST(PARSETest, TestShuntingYardOrigin) {
     }
     {
         std::string log;
+        std::string exp("a1/2.0 + 3.0 / 2.0");
+        ShuntingYard *sy = new ShuntingYard(exp);
+        ASSERT_TRUE(sy->compile());
+        std::vector<std::pair<const char*, Value*>> env = {
+            std::make_pair<const char*, Value*>("a1",  new DoubleValue(10.3)),
+        };
+        EXPECT_FLOAT_EQ(sy->eval_double(env, log), 10.3/2.0 + 3.0 / 2.0);
+    }
+    {
+        std::string log;
         std::string exp("10");
         ShuntingYard *sy = new ShuntingYard(exp);
         ASSERT_TRUE(sy->compile());
@@ -208,5 +224,32 @@ TEST(PARSETest, TestShuntingYardOrigin) {
         std::vector<std::pair<const char*, Value*>> env = {
         };
         EXPECT_DOUBLE_EQ(sy->eval_double(env, log), 10.3);
+    }
+    {
+        std::string log;
+        std::string exp("10.3 + 1.3");
+        ShuntingYard *sy = new ShuntingYard(exp);
+        ASSERT_TRUE(sy->compile());
+        std::vector<std::pair<const char*, Value*>> env = {
+        };
+        EXPECT_DOUBLE_EQ(sy->eval_double(env, log), 11.6);
+    }
+    {
+        std::string log;
+        std::string exp("10.3 + 1.3 * 2.0 / 3.0");
+        ShuntingYard *sy = new ShuntingYard(exp);
+        ASSERT_TRUE(sy->compile());
+        std::vector<std::pair<const char*, Value*>> env = {
+        };
+        EXPECT_DOUBLE_EQ(sy->eval_double(env, log), 10.3 + 1.3 * 2.0 / 3.0);
+    }
+    {
+        std::string log;
+        std::string exp("10.3 * ( 1.0 + 2.0 / 3.0 + 1.0) + 1.2 + 3.4 / 3.7");
+        ShuntingYard *sy = new ShuntingYard(exp);
+        ASSERT_TRUE(sy->compile());
+        std::vector<std::pair<const char*, Value*>> env = {
+        };
+        EXPECT_DOUBLE_EQ(sy->eval_double(env, log), 10.3 * ( 1.0 + 2.0 / 3.0 + 1.0) + 1.2 + 3.4 / 3.7);
     }
 }

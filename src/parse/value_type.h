@@ -3,6 +3,7 @@
 #include <iostream>
 #include <memory>
 #include <queue>
+#include <sstream>
 #include <stack>
 #include <string.h>
 #include <string>
@@ -114,6 +115,8 @@ public:
   virtual void div(Value *v, Value *result){};
   // a % b => a.mod(b)
   virtual void mod(Value *v, Value *result){};
+  // string
+  virtual std::string to_string() { return ""; };
 };
 
 class BoolValue : public Value {
@@ -146,6 +149,12 @@ public:
       return val == _v->val;
     }
     return false;
+  };
+  // string
+  std::string to_string() {
+    std::stringstream ss;
+    ss << val;
+    return ss.str();
   };
 };
 
@@ -230,6 +239,12 @@ public:
       _r->val = (T)_m;
     }
   };
+  // string
+  std::string to_string() {
+    std::stringstream ss;
+    ss << val;
+    return ss.str();
+  };
 };
 
 class StringValue : public Value {
@@ -288,6 +303,12 @@ public:
       return strcmp(val, _v->val) <= 0;
     }
     return false;
+  };
+  // string
+  std::string to_string() {
+    std::stringstream ss;
+    ss << std::string(val);
+    return ss.str();
   };
 };
 
