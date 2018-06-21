@@ -115,6 +115,10 @@ public:
   virtual void div(Value *v, Value *result){};
   // a % b => a.mod(b)
   virtual void mod(Value *v, Value *result){};
+  // negative: 1 => -1, or -1 => 1
+  virtual void negative(){};
+  // a / b => a.div(b)
+  virtual void s_div(Value *v, Value *result){};
   // string
   virtual std::string to_string() { return ""; };
 };
@@ -160,6 +164,10 @@ public:
 
 template <typename T, ValueType value_type> class NumberValue : public Value {
   typedef NumberValue<T, value_type> NumberValue_TYPE;
+  typedef NumberValue<int, vInt> IntValue_TYPE;
+  typedef NumberValue<long, vLong> LongValue_TYPE;
+  typedef NumberValue<float, vFloat> FloatValue_TYPE;
+  typedef NumberValue<double, vDouble> DoubleValue_TYPE;
 
 public:
   T val;
@@ -179,6 +187,16 @@ public:
     if (v->type() == type()) {
       auto _v = (NumberValue_TYPE *)v;
       return val > _v->val;
+    } else {
+      if (v->type() == vInt) {
+        return val > ((IntValue_TYPE *)v)->val;
+      } else if (v->type() == vDouble) {
+        return val > ((DoubleValue_TYPE *)v)->val;
+      } else if (v->type() == vLong) {
+        return val > ((LongValue_TYPE *)v)->val;
+      } else if (v->type() == vFloat) {
+        return val > ((FloatValue_TYPE *)v)->val;
+      }
     }
     return false;
   };
@@ -186,6 +204,16 @@ public:
     if (v->type() == type()) {
       auto _v = (NumberValue_TYPE *)v;
       return val >= _v->val;
+    } else {
+      if (v->type() == vInt) {
+        return val >= ((IntValue_TYPE *)v)->val;
+      } else if (v->type() == vDouble) {
+        return val >= ((DoubleValue_TYPE *)v)->val;
+      } else if (v->type() == vLong) {
+        return val >= ((LongValue_TYPE *)v)->val;
+      } else if (v->type() == vFloat) {
+        return val >= ((FloatValue_TYPE *)v)->val;
+      }
     }
     return false;
   };
@@ -193,6 +221,16 @@ public:
     if (v->type() == type()) {
       auto _v = (NumberValue_TYPE *)v;
       return val < _v->val;
+    } else {
+      if (v->type() == vInt) {
+        return val < ((IntValue_TYPE *)v)->val;
+      } else if (v->type() == vDouble) {
+        return val < ((DoubleValue_TYPE *)v)->val;
+      } else if (v->type() == vLong) {
+        return val < ((LongValue_TYPE *)v)->val;
+      } else if (v->type() == vFloat) {
+        return val < ((FloatValue_TYPE *)v)->val;
+      }
     }
     return false;
   };
@@ -200,6 +238,16 @@ public:
     if (v->type() == type()) {
       auto _v = (NumberValue_TYPE *)v;
       return val <= _v->val;
+    } else {
+      if (v->type() == vInt) {
+        return val <= ((IntValue_TYPE *)v)->val;
+      } else if (v->type() == vDouble) {
+        return val <= ((DoubleValue_TYPE *)v)->val;
+      } else if (v->type() == vLong) {
+        return val <= ((LongValue_TYPE *)v)->val;
+      } else if (v->type() == vFloat) {
+        return val <= ((FloatValue_TYPE *)v)->val;
+      }
     }
     return false;
   };
@@ -208,6 +256,21 @@ public:
       auto _v = (NumberValue_TYPE *)v;
       auto _r = (NumberValue_TYPE *)result;
       _r->val = val + _v->val;
+    } else {
+      auto _r = (NumberValue_TYPE *)result;
+      if (v->type() == vInt) {
+        auto _v = (IntValue_TYPE *)v;
+        _r->val = val + _v->val;
+      } else if (v->type() == vDouble) {
+        auto _v = (DoubleValue_TYPE *)v;
+        _r->val = val + _v->val;
+      } else if (v->type() == vLong) {
+        auto _v = (LongValue_TYPE *)v;
+        _r->val = val + _v->val;
+      } else if (v->type() == vFloat) {
+        auto _v = (FloatValue_TYPE *)v;
+        _r->val = val + _v->val;
+      }
     }
   };
   void sub(Value *v, Value *result) {
@@ -215,6 +278,21 @@ public:
       auto _v = (NumberValue_TYPE *)v;
       auto _r = (NumberValue_TYPE *)result;
       _r->val = val - _v->val;
+    } else {
+      auto _r = (NumberValue_TYPE *)result;
+      if (v->type() == vInt) {
+        auto _v = (IntValue_TYPE *)v;
+        _r->val = val - _v->val;
+      } else if (v->type() == vDouble) {
+        auto _v = (DoubleValue_TYPE *)v;
+        _r->val = val - _v->val;
+      } else if (v->type() == vLong) {
+        auto _v = (LongValue_TYPE *)v;
+        _r->val = val - _v->val;
+      } else if (v->type() == vFloat) {
+        auto _v = (FloatValue_TYPE *)v;
+        _r->val = val - _v->val;
+      }
     }
   };
   void mul(Value *v, Value *result) {
@@ -222,12 +300,58 @@ public:
       auto _v = (NumberValue_TYPE *)v;
       auto _r = (NumberValue_TYPE *)result;
       _r->val = val * _v->val;
+    } else {
+      auto _r = (NumberValue_TYPE *)result;
+      if (v->type() == vInt) {
+        auto _v = (IntValue_TYPE *)v;
+        _r->val = val * _v->val;
+      } else if (v->type() == vDouble) {
+        auto _v = (DoubleValue_TYPE *)v;
+        _r->val = val * _v->val;
+      } else if (v->type() == vLong) {
+        auto _v = (LongValue_TYPE *)v;
+        _r->val = val * _v->val;
+      } else if (v->type() == vFloat) {
+        auto _v = (FloatValue_TYPE *)v;
+        _r->val = val * _v->val;
+      }
     }
   };
   void div(Value *v, Value *result) {
     if (v->type() == type()) {
       auto _v = (NumberValue_TYPE *)v;
       auto _r = (NumberValue_TYPE *)result;
+      _r->val = val / _v->val;
+    } else {
+      auto _r = (NumberValue_TYPE *)result;
+      if (v->type() == vInt) {
+        auto _v = (IntValue_TYPE *)v;
+        _r->val = val / _v->val;
+      } else if (v->type() == vDouble) {
+        auto _v = (DoubleValue_TYPE *)v;
+        _r->val = val / _v->val;
+      } else if (v->type() == vLong) {
+        auto _v = (LongValue_TYPE *)v;
+        _r->val = val / _v->val;
+      } else if (v->type() == vFloat) {
+        auto _v = (FloatValue_TYPE *)v;
+        _r->val = val / _v->val;
+      }
+    }
+  };
+  void s_div(Value *v, Value *result) {
+    auto _r = (DoubleValue_TYPE *)result;
+    if (v->type() == vInt) {
+      auto _v = (IntValue_TYPE *)v;
+      _r->val = val / _v->val;
+    } else if (v->type() == vDouble) {
+      auto _v = (DoubleValue_TYPE *)v;
+      _r->val = val / _v->val;
+    } else if (v->type() == vLong) {
+      auto _v = (LongValue_TYPE *)v;
+      _r->val = val / _v->val;
+    } else if (v->type() == vFloat) {
+      auto _v = (FloatValue_TYPE *)v;
       _r->val = val / _v->val;
     }
   };
@@ -239,6 +363,8 @@ public:
       _r->val = (T)_m;
     }
   };
+  // negative: 1 => -1, or -1 => 1
+  virtual void negative() { val = -val; };
   // string
   std::string to_string() {
     std::stringstream ss;

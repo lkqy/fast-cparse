@@ -512,24 +512,49 @@ Value *ShuntingYard::op_varible_varible(const std::string &result_varible,
     return new BoolValue(first->_or(second));
   } break;
   case kADD: {
-    Value *result = first->clone();
-    first->add(second, result);
-    return result;
+    if (first->type() >= second->type()) {
+      Value *result = first->clone();
+      first->add(second, result);
+      return result;
+    } else {
+      Value *result = second->clone();
+      second->add(first, result);
+      return result;
+    }
   } break;
   case kSUB: {
-    Value *result = first->clone();
-    first->sub(second, result);
-    return result;
+    if (first->type() >= second->type()) {
+      Value *result = first->clone();
+      first->sub(second, result);
+      return result;
+    } else {
+      Value *result = second->clone();
+      second->sub(first, result);
+      result->negative();
+      return result;
+    }
   } break;
   case kMUL: {
-    Value *result = first->clone();
-    first->mul(second, result);
-    return result;
+    if (first->type() >= second->type()) {
+      Value *result = first->clone();
+      first->mul(second, result);
+      return result;
+    } else {
+      Value *result = second->clone();
+      second->mul(first, result);
+      return result;
+    }
   } break;
   case kDIV: {
-    Value *result = first->clone();
-    first->div(second, result);
-    return result;
+    if (first->type() >= second->type()) {
+      Value *result = first->clone();
+      first->div(second, result);
+      return result;
+    } else {
+      Value *result = new DoubleValue(0);
+      first->s_div(second, result);
+      return result;
+    }
   } break;
   case kMOD: {
     Value *result = first->clone();
@@ -704,7 +729,15 @@ int ShuntingYard::eval_int(
   Value *v = _eval(varibles, log);
   int ret = 0;
   if (v != nullptr) {
-    ret = ((IntValue *)v)->val;
+    if (v->type() == vInt) {
+      ret = ((IntValue *)v)->val;
+    } else if (v->type() == vDouble) {
+      ret = ((DoubleValue *)v)->val;
+    } else if (v->type() == vLong) {
+      ret = ((LongValue *)v)->val;
+    } else if (v->type() == vFloat) {
+      ret = ((FloatValue *)v)->val;
+    }
     free_result(v);
   }
   free_map(varibles);
@@ -716,7 +749,15 @@ long ShuntingYard::eval_long(
   Value *v = _eval(varibles, log);
   long ret = 0;
   if (v != nullptr) {
-    ret = ((LongValue *)v)->val;
+    if (v->type() == vInt) {
+      ret = ((IntValue *)v)->val;
+    } else if (v->type() == vDouble) {
+      ret = ((DoubleValue *)v)->val;
+    } else if (v->type() == vLong) {
+      ret = ((LongValue *)v)->val;
+    } else if (v->type() == vFloat) {
+      ret = ((FloatValue *)v)->val;
+    }
     free_result(v);
   }
   free_map(varibles);
@@ -728,7 +769,15 @@ float ShuntingYard::eval_float(
   Value *v = _eval(varibles, log);
   float ret = 0;
   if (v != nullptr) {
-    ret = ((FloatValue *)v)->val;
+    if (v->type() == vInt) {
+      ret = ((IntValue *)v)->val;
+    } else if (v->type() == vDouble) {
+      ret = ((DoubleValue *)v)->val;
+    } else if (v->type() == vLong) {
+      ret = ((LongValue *)v)->val;
+    } else if (v->type() == vFloat) {
+      ret = ((FloatValue *)v)->val;
+    }
     free_result(v);
   }
   free_map(varibles);
@@ -740,7 +789,15 @@ double ShuntingYard::eval_double(
   Value *v = _eval(varibles, log);
   double ret = 0;
   if (v != nullptr) {
-    ret = ((DoubleValue *)v)->val;
+    if (v->type() == vInt) {
+      ret = ((IntValue *)v)->val;
+    } else if (v->type() == vDouble) {
+      ret = ((DoubleValue *)v)->val;
+    } else if (v->type() == vLong) {
+      ret = ((LongValue *)v)->val;
+    } else if (v->type() == vFloat) {
+      ret = ((FloatValue *)v)->val;
+    }
     free_result(v);
   }
   free_map(varibles);
