@@ -1,5 +1,6 @@
 #pragma once
 #include <algorithm>
+#include <cmath>
 #include <iostream>
 #include <memory>
 #include <queue>
@@ -36,6 +37,7 @@ enum OperateType {
   kFUNC3 = 20, // 3参数，一个返回值
   kVEC = 21,   // 一个数组，暂时只支持常量
   kSET = 22,   // 一个集合，暂时只支持常量
+  kPOW = 23,   // 2 ^ 3 = 8
 };
 
 enum ValueType {
@@ -121,6 +123,8 @@ public:
   virtual void s_div(Value *v, Value *result){};
   // string
   virtual std::string to_string() { return ""; };
+  // a ^ b => pow(a, b)
+  virtual void pow(Value *v, Value *result){};
 };
 
 class BoolValue : public Value {
@@ -370,6 +374,23 @@ public:
     std::stringstream ss;
     ss << val;
     return ss.str();
+  };
+  // a ^ b => pow(a, b)
+  virtual void pow(Value *v, Value *result) {
+    auto _r = (DoubleValue_TYPE *)result;
+    if (v->type() == vInt) {
+      auto _v = (IntValue_TYPE *)v;
+      _r->val = std::pow(val, _v->val);
+    } else if (v->type() == vDouble) {
+      auto _v = (DoubleValue_TYPE *)v;
+      _r->val = std::pow(val, _v->val);
+    } else if (v->type() == vLong) {
+      auto _v = (LongValue_TYPE *)v;
+      _r->val = std::pow(val, _v->val);
+    } else if (v->type() == vFloat) {
+      auto _v = (FloatValue_TYPE *)v;
+      _r->val = std::pow(val, _v->val);
+    }
   };
 };
 

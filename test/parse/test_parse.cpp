@@ -56,6 +56,7 @@ TEST(PARSETest, TestShuntingYardBuild) {
         "\"a\"==\"a\"",
         "1.0!=2.0",
         "\"a\"!=\"b\"",
+        "\"a\"==\"a\""
     };
     std::string log;
     for(auto e : exps_is_true) {
@@ -70,6 +71,7 @@ TEST(PARSETest, TestShuntingYardBuild) {
         "1>2.0",
         "1>2",
         "1==1.0",
+        "\"a\" != \"a\"",
         "1.0==1",
         "\"a\"==1",
     };
@@ -83,6 +85,10 @@ TEST(PARSETest, TestShuntingYardBuild) {
     }
     std::vector<std::string> exps_diff_type_true = {
         "1!=1.0",
+        "\"a\" != \"b\"",
+        "\"a\" != \"b\" and 1!=2",
+        "(\"a\" != \"b\") and (1!=2)",
+        "not (1!=1)",
         "1.0!=1",
         "\"a\"!=1",
     };
@@ -122,6 +128,8 @@ TEST(PARSETest, TestShuntingYardBuildVarible) {
         "a>b",
         "local_hour in VEC(10, 11, 12)",
         "(lang == \"jp\" and tz_hour in VEC(8, 12, 18)) or (lang==\"us\" and tz_hour in VEC(11, 15, 21)) or not (lang in VEC(\"jp\", \"us\"))",
+        "(lang == \"jp\" and tz_hour in VEC(8, 12, 18)) or (lang==\"us\" and tz_hour in VEC(11, 15, 21)) or lang != \"jp\"",
+        "not (lang != \"jp\")",
         "(lang == \"jp1\" and tz_hour in VEC(8, 12, 18)) or (lang==\"us\" and tz_hour in VEC(11, 15, 21)) or not (lang in VEC(\"jp1\", \"us\"))",
 
     };
@@ -233,6 +241,33 @@ TEST(PARSETest, TestShuntingYardOrigin) {
         std::vector<std::pair<const char*, Value*>> env = {
         };
         EXPECT_DOUBLE_EQ(sy->eval_double(env, log), 11.6);
+    }
+    {
+        std::string log;
+        std::string exp("2 ^ 3");
+        ShuntingYard *sy = new ShuntingYard(exp);
+        ASSERT_TRUE(sy->compile());
+        std::vector<std::pair<const char*, Value*>> env = {
+        };
+        EXPECT_DOUBLE_EQ(sy->eval_double(env, log), pow(2, 3));
+    }
+    {
+        std::string log;
+        std::string exp("2 ^ 3 + 1.3 * 10 + 1");
+        ShuntingYard *sy = new ShuntingYard(exp);
+        ASSERT_TRUE(sy->compile());
+        std::vector<std::pair<const char*, Value*>> env = {
+        };
+        EXPECT_DOUBLE_EQ(sy->eval_double(env, log), pow(2, 3) + 1.3 * 10 + 1);
+    }
+    {
+        std::string log;
+        std::string exp("10.3 ^ 1.3");
+        ShuntingYard *sy = new ShuntingYard(exp);
+        ASSERT_TRUE(sy->compile());
+        std::vector<std::pair<const char*, Value*>> env = {
+        };
+        EXPECT_DOUBLE_EQ(sy->eval_double(env, log), pow(10.3, 1.3));
     }
     {
         std::string log;
@@ -568,6 +603,118 @@ TEST(PARSETest, TestShuntingYardNumberTypeConstMul) {
     }
 }
 
+TEST(PARSETest, TestShuntingYardNumberTypeConstPow) {
+    std::string exp("b^10");
+    ShuntingYard *sy = new ShuntingYard(exp);
+    ASSERT_TRUE(sy->compile());
+    {
+        std::vector<std::pair<const char*, Value*>> env = {
+            std::make_pair<const char*, Value*>("b",  new IntValue(10)),
+        };
+        std::string log;
+        EXPECT_DOUBLE_EQ(sy->eval_double(env, log), pow(10, 10));
+    }
+    {
+        std::vector<std::pair<const char*, Value*>> env = {
+            std::make_pair<const char*, Value*>("b",  new LongValue(10)),
+        };
+        std::string log;
+        EXPECT_DOUBLE_EQ(sy->eval_double(env, log), pow(10, 10));
+    }
+    {
+        std::vector<std::pair<const char*, Value*>> env = {
+            std::make_pair<const char*, Value*>("b",  new IntValue(10)),
+        };
+        std::string log;
+        EXPECT_DOUBLE_EQ(sy->eval_double(env, log), pow(10, 10));
+    }
+    {
+        std::vector<std::pair<const char*, Value*>> env = {
+            std::make_pair<const char*, Value*>("b",  new DoubleValue(10)),
+        };
+        std::string log;
+        EXPECT_DOUBLE_EQ(sy->eval_double(env, log), pow(10, 10));
+    }
+}
+
+TEST(PARSETest, TestShuntingYardNumberTypePow1) {
+    std::string exp("a^b");
+    ShuntingYard *sy = new ShuntingYard(exp);
+    ASSERT_TRUE(sy->compile());
+    {
+        std::vector<std::pair<const char*, Value*>> env = {
+            std::make_pair<const char*, Value*>("a",  new IntValue(2)),
+            std::make_pair<const char*, Value*>("b",  new IntValue(5)),
+        };
+        std::string log;
+        EXPECT_DOUBLE_EQ(sy->eval_int(env, log), pow(2, 5));
+    }
+    {
+        std::vector<std::pair<const char*, Value*>> env = {
+            std::make_pair<const char*, Value*>("a",  new IntValue(2)),
+            std::make_pair<const char*, Value*>("b",  new LongValue(5)),
+        };
+        std::string log;
+        EXPECT_DOUBLE_EQ(sy->eval_int(env, log), pow(2, 5));
+    }
+    {
+        std::vector<std::pair<const char*, Value*>> env = {
+            std::make_pair<const char*, Value*>("a",  new IntValue(2)),
+            std::make_pair<const char*, Value*>("b",  new FloatValue(5)),
+        };
+        std::string log;
+        EXPECT_DOUBLE_EQ(sy->eval_int(env, log), pow(2, 5));
+    }
+    {
+        std::vector<std::pair<const char*, Value*>> env = {
+            std::make_pair<const char*, Value*>("a",  new IntValue(2)),
+            std::make_pair<const char*, Value*>("b",  new DoubleValue(5)),
+        };
+        std::string log;
+        EXPECT_DOUBLE_EQ(sy->eval_int(env, log), pow(2, 5));
+    }
+    {
+        std::vector<std::pair<const char*, Value*>> env = {
+            std::make_pair<const char*, Value*>("b",  new IntValue(2)),
+            std::make_pair<const char*, Value*>("a",  new LongValue(5)),
+        };
+        std::string log;
+        EXPECT_DOUBLE_EQ(sy->eval_int(env, log), pow(5, 2));
+    }
+    {
+        std::vector<std::pair<const char*, Value*>> env = {
+            std::make_pair<const char*, Value*>("b",  new IntValue(2)),
+            std::make_pair<const char*, Value*>("a",  new FloatValue(5)),
+        };
+        std::string log;
+        EXPECT_DOUBLE_EQ(sy->eval_int(env, log), pow(5, 2));
+    }
+    {
+        std::vector<std::pair<const char*, Value*>> env = {
+            std::make_pair<const char*, Value*>("b",  new IntValue(2)),
+            std::make_pair<const char*, Value*>("a",  new DoubleValue(5)),
+        };
+        std::string log;
+        EXPECT_DOUBLE_EQ(sy->eval_double(env, log), pow(5, 2));
+    }
+    {
+        std::vector<std::pair<const char*, Value*>> env = {
+            std::make_pair<const char*, Value*>("b",  new DoubleValue(2)),
+            std::make_pair<const char*, Value*>("a",  new DoubleValue(5)),
+        };
+        std::string log;
+        EXPECT_DOUBLE_EQ(sy->eval_int(env, log), pow(5, 2));
+    }
+    {
+        std::vector<std::pair<const char*, Value*>> env = {
+            std::make_pair<const char*, Value*>("b",  new FloatValue(2)),
+            std::make_pair<const char*, Value*>("a",  new DoubleValue(5)),
+        };
+        std::string log;
+        EXPECT_DOUBLE_EQ(sy->eval_double(env, log), pow(5, 2));
+    }
+}
+
 TEST(PARSETest, TestShuntingYardNumberTypeConstMul1) {
     std::string exp("click * 100");
     ShuntingYard *sy = new ShuntingYard(exp);
@@ -579,4 +726,13 @@ TEST(PARSETest, TestShuntingYardNumberTypeConstMul1) {
         std::string log;
         EXPECT_DOUBLE_EQ(sy->eval_double(env, log), 0.244440*100);
     }
+}
+
+TEST(PARSETest, TestShuntingYardConstStringCmp) {
+    std::string exp("\"a\"==\"a\"");
+    ShuntingYard *sy = new ShuntingYard(exp);
+    ASSERT_TRUE(sy->compile());
+    std::string log;
+    std::vector<std::pair<const char*, Value*>> env;
+    ASSERT_TRUE(sy->eval_bool(env, log));
 }

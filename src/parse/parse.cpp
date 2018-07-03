@@ -31,7 +31,7 @@ int ShuntingYard::get_token_type(char c, int pre_type) {
   if (isalpha(c) || c == '_' || (pre_type == 4 && isdigit(c))) {
     return 4;
   }
-  if (c == '+' || c == '-' || c == '*' || c == '/' || c == '%')
+  if (c == '+' || c == '-' || c == '*' || c == '/' || c == '%' || c == '^')
     return 1;
   if (c == '>' || c == '<' || c == '=' || c == '!')
     return 2;
@@ -45,12 +45,15 @@ int ShuntingYard::get_token_type(char c, int pre_type) {
 //是否左结合
 bool ShuntingYard::op_left_assoc(const std::string &op) {
   return op == "+" || op == "-" || op == "/" || op == "*" || op == "%" ||
-         op == ">" || op == ">=" || op == "<" || op == "<=" || op == "in" ||
-         op == "==" || op == "and" || op == "or" || op == "in";
+         op == "^" || op == ">" || op == ">=" || op == "<" || op == "<=" ||
+         op == "in" || op == "!=" || op == "==" || op == "and" || op == "or" ||
+         op == "in";
 };
 //运算符优先级
 int ShuntingYard::op_preced(const std::string op) {
   if (op == "not")
+    return 10;
+  if (op == "^")
     return 9;
   if (op == "*" || op == "/" || op == "%")
     return 8;
@@ -58,7 +61,7 @@ int ShuntingYard::op_preced(const std::string op) {
     return 7;
   if (op == "in")
     return 7;
-  if (op == ">" || op == ">=" || op == "<" || op == "<=")
+  if (op == ">" || op == ">=" || op == "<" || op == "<=" || op == "!=")
     return 6;
   if (op == "==")
     return 5;
@@ -72,9 +75,9 @@ int ShuntingYard::op_preced(const std::string op) {
 size_t ShuntingYard::op_arg_count(const std::string &op) {
   if (op == "not")
     return 1;
-  if (op == "+" || op == "-" || "*" || op == "/" || op == "%")
+  if (op == "+" || op == "-" || "*" || op == "/" || op == "%" || op == "^")
     return 2;
-  if (op == ">" || op == ">=" || op == "<" || op == "<=")
+  if (op == ">" || op == ">=" || op == "<" || op == "<=" || op == "!=")
     return 2;
   if (op == "==" || op == "in" || op == "and" || op == "or")
     return 2;
@@ -555,6 +558,11 @@ Value *ShuntingYard::op_varible_varible(const std::string &result_varible,
       first->s_div(second, result);
       return result;
     }
+  } break;
+  case kPOW: {
+    Value *result = new DoubleValue(0);
+    first->pow(second, result);
+    return result;
   } break;
   case kMOD: {
     Value *result = first->clone();

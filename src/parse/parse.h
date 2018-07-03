@@ -154,6 +154,7 @@ private:
       {">", kGREATE},        {"<", kLOWER},  {">=", kGREATEOREQUAL},
       {"<=", kLOWEROREQUAL}, {"==", kEQUAL}, {"not", kNOT},
       {"!=", kNOTEQUAL},     {"and", kAND},  {"or", kOR},
+      {"^", kPOW},
   };
 
   std::unordered_map<std::string, OperateType> inner_function_map = {
