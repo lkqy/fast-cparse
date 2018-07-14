@@ -24,22 +24,27 @@ bool ShuntingYard::compile() {
   }
 }
 
-int ShuntingYard::get_token_type(char c, int pre_type) {
-  //暂时不考虑+2， -1这种case
+StrTokenType ShuntingYard::get_token_type(char c, StrTokenType pre_type) {
   //这里简单实现同数字的字符可以互相结合，比如=====, +++++++  是一个运算符
   // 解析有顺序，不可以更换顺序
-  if (isalpha(c) || c == '_' || (pre_type == 4 && isdigit(c))) {
-    return 4;
+  if (isalpha(c) || c == '_' || (pre_type == TYPE_VARIBLE && isdigit(c))) {
+    // 支持c类型变量
+    return TYPE_VARIBLE;
+  }
+  if ((c == '-' || c == '+') &&
+      (pre_type == TYPE_ALGO_OPERATOR || pre_type == TYPE_PRE)) {
+    // 如果前面是运算符，后面是一个+ or -，则归类到常量里
+    return TYPE_CONST;
   }
   if (c == '+' || c == '-' || c == '*' || c == '/' || c == '%' || c == '^')
-    return 1;
+    return TYPE_ALGO_OPERATOR;
   if (c == '>' || c == '<' || c == '=' || c == '!')
-    return 2;
+    return TYPE_CMP_OPERATOR;
   if (isdigit(c) || c == '.')
-    return 3;
+    return TYPE_CONST;
   if (c == ',')
-    return 5;
-  return 6;
+    return TYPE_COMMA;
+  return TYPE_OTHERS;
 }
 
 //是否左结合
@@ -113,7 +118,10 @@ std::string ShuntingYard::next_token(const char *input,
     *next_token = start_input;
     return std::string(start_token, start_input);
   } else {
-    int type = get_token_type(*start_input, -1000);
+    StrTokenType type = get_token_type(*start_input, TYPE_PRE);
+    if (*start_input)
+      ++start_input;
+
     while (*start_input && type == get_token_type(*start_input, type))
       ++start_input;
     *next_token = start_input;
@@ -389,8 +397,9 @@ Node *ShuntingYard::build_expression_tree(
   //内置函数都是常量表达式
   auto process_inner_function = [&](auto &token, int param_number) {
     long stack_size = stack.size();
-    if (stack_size < param_number)
+    if (stack_size < param_number) {
       return false;
+    }
 
     std::stack<Node *> temp_stack;
     for (int i = 0; i < param_number; ++i) {
@@ -402,8 +411,9 @@ Node *ShuntingYard::build_expression_tree(
       values.push_back(temp_stack.top()->value);
       temp_stack.pop();
     }
-    if (values.size() == 0)
+    if (values.size() == 0) {
       return false;
+    }
     Node *node = new Node();
     node->op_count = -1;
     if (token == "VEC") {

@@ -1,5 +1,6 @@
 以_, a~z 开头的token为变量(c语言的变量规范)
 以A~Z 开头的token为函数
+支持常量类型，比如1=>long, -1.0=>double, +2.0=>double
 
 这个实现主要解决高性能场景下的动态求值，目前只支持特定类型的操作。
 1、+ - * / % => 仅限int long float double

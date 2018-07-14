@@ -17,6 +17,11 @@ TEST(PARSETest, TestShuntingYardBuild) {
         "1.0",
         "\"abc\"",
         "a==11",
+        "-1",
+        "-1.0",
+        "-1.02",
+        "+1",
+        "+1.0",
         "local_hour in VEC(10, 11, 12)"
     };
     std::vector<std::string> exp_is_fail = {
@@ -25,8 +30,9 @@ TEST(PARSETest, TestShuntingYardBuild) {
         "\"abc",
         "abc\"",
         "1a",
-        "-1",
-        "+1",
+        "-a",
+        "+a",
+        "+\"1\"",
     };
     for(auto e : exp_is_ok) {
         std::string exp(e);
@@ -42,19 +48,29 @@ TEST(PARSETest, TestShuntingYardBuild) {
     }
     std::vector<std::string> exps_is_true = {
         "1<=2.0",
+        "1>-2.0",
         "1<2.0",
+        "1>=-2.0",
         "1.0<2",
         "1.0<=2",
+        "-1.0<=2",
         "1!=2",
+        "-1!=2",
         "1<=2",
         "1<2",
+        "-1<2",
         "1.0<2.0",
+        "-1.0<2.0",
         "1.0<=2.0",
+        "-1.0<=2.0",
         "not (1>2)",
+        "not (-1>2)",
         "1==1",
         "1.0==1.0",
+        "-1.0==-1.0",
         "\"a\"==\"a\"",
         "1.0!=2.0",
+        "-1.0!=-2.0",
         "\"a\"!=\"b\"",
         "\"a\"==\"a\""
     };
@@ -69,10 +85,16 @@ TEST(PARSETest, TestShuntingYardBuild) {
     }
     std::vector<std::string> exps_diff_type_false = {
         "1>2.0",
+        "-1>2.0",
         "1>2",
+        "-1>2",
         "1==1.0",
+        "-1==1.0",
+        "1==-1.0",
         "\"a\" != \"a\"",
         "1.0==1",
+        "1.0==-1",
+        "-1.0==-1",
         "\"a\"==1",
     };
     for(auto e : exps_diff_type_false) {
@@ -90,6 +112,8 @@ TEST(PARSETest, TestShuntingYardBuild) {
         "(\"a\" != \"b\") and (1!=2)",
         "not (1!=1)",
         "1.0!=1",
+        "-1.0!=1",
+        "-1.0!=-1",
         "\"a\"!=1",
     };
     for(auto e : exps_diff_type_true) {
@@ -106,7 +130,8 @@ TEST(PARSETest, TestShuntingYardBuildComplicate) {
     std::vector<std::string> exps_is_true = {
         "1!=2 and 2>1 and \"a\"!=3 and \"a\" != \"b\"",
         "(1==2) or (1>0 and \"a\" == \"a\")",
-        "(((((2.0>1.0)))))"
+        "(((((2.0>1.0)))))",
+        "(((((2.0>-1.0)))))"
     };
     std::string log;
     for(auto e : exps_is_true) {
@@ -271,6 +296,15 @@ TEST(PARSETest, TestShuntingYardOrigin) {
     }
     {
         std::string log;
+        std::string exp("10.3 + 1.3 *-2.0 / 3.0");
+        ShuntingYard *sy = new ShuntingYard(exp);
+        ASSERT_TRUE(sy->compile());
+        std::vector<std::pair<const char*, Value*>> env = {
+        };
+        EXPECT_DOUBLE_EQ(sy->eval_double(env, log), 10.3 + 1.3 * -2.0 / 3.0);
+    }
+    {
+        std::string log;
         std::string exp("10.3 + 1.3 * 2.0 / 3.0");
         ShuntingYard *sy = new ShuntingYard(exp);
         ASSERT_TRUE(sy->compile());
@@ -286,6 +320,15 @@ TEST(PARSETest, TestShuntingYardOrigin) {
         std::vector<std::pair<const char*, Value*>> env = {
         };
         EXPECT_DOUBLE_EQ(sy->eval_double(env, log), 10.3 * ( 1.0 + 2.0 / 3.0 + 1.0) + 1.2 + 3.4 / 3.7);
+    }
+    {
+        std::string log;
+        std::string exp("10.3 * ( 1.0 + 2.0 / 3.0 +-1.0) + 1.2 + 3.4 / -3.7");
+        ShuntingYard *sy = new ShuntingYard(exp);
+        ASSERT_TRUE(sy->compile());
+        std::vector<std::pair<const char*, Value*>> env = {
+        };
+        EXPECT_DOUBLE_EQ(sy->eval_double(env, log), 10.3 * ( 1.0 + 2.0 / 3.0 + -1.0) + 1.2 + 3.4 / -3.7);
     }
 }
 
@@ -570,33 +613,33 @@ TEST(PARSETest, TestShuntingYardNumberTypeMul) {
 }
 
 TEST(PARSETest, TestShuntingYardNumberTypeConstMul) {
-    std::string exp("b*100");
+    std::string exp("b*-100");
     ShuntingYard *sy = new ShuntingYard(exp);
     ASSERT_TRUE(sy->compile());
     {
         std::vector<std::pair<const char*, Value*>> env = {
-            std::make_pair<const char*, Value*>("b",  new IntValue(10)),
+            std::make_pair<const char*, Value*>("b",  new IntValue(-10)),
         };
         std::string log;
         EXPECT_DOUBLE_EQ(sy->eval_double(env, log), 1000);
     }
     {
         std::vector<std::pair<const char*, Value*>> env = {
-            std::make_pair<const char*, Value*>("b",  new LongValue(10)),
+            std::make_pair<const char*, Value*>("b",  new LongValue(-10)),
         };
         std::string log;
         EXPECT_DOUBLE_EQ(sy->eval_double(env, log), 1000);
     }
     {
         std::vector<std::pair<const char*, Value*>> env = {
-            std::make_pair<const char*, Value*>("b",  new IntValue(10)),
+            std::make_pair<const char*, Value*>("b",  new IntValue(-10)),
         };
         std::string log;
         EXPECT_DOUBLE_EQ(sy->eval_double(env, log), 1000);
     }
     {
         std::vector<std::pair<const char*, Value*>> env = {
-            std::make_pair<const char*, Value*>("b",  new DoubleValue(10)),
+            std::make_pair<const char*, Value*>("b",  new DoubleValue(-10)),
         };
         std::string log;
         EXPECT_DOUBLE_EQ(sy->eval_double(env, log), 1000);
@@ -716,7 +759,7 @@ TEST(PARSETest, TestShuntingYardNumberTypePow1) {
 }
 
 TEST(PARSETest, TestShuntingYardNumberTypeConstMul1) {
-    std::string exp("click * 100");
+    std::string exp("click *-100");
     ShuntingYard *sy = new ShuntingYard(exp);
     ASSERT_TRUE(sy->compile());
     {
@@ -724,7 +767,7 @@ TEST(PARSETest, TestShuntingYardNumberTypeConstMul1) {
             std::make_pair<const char*, Value*>("click",  new DoubleValue(0.244440)),
         };
         std::string log;
-        EXPECT_DOUBLE_EQ(sy->eval_double(env, log), 0.244440*100);
+        EXPECT_DOUBLE_EQ(sy->eval_double(env, log), 0.244440*-100);
     }
 }
 

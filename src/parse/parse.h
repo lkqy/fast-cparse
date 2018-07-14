@@ -20,6 +20,16 @@ typedef std::function<Value *(Value *)> BindFunc1;
 typedef std::function<Value *(Value *, Value *)> BindFunc2;
 typedef std::function<Value *(Value *, Value *, Value *)> BindFunc3;
 
+enum StrTokenType {
+  TYPE_PRE = -1000,
+  TYPE_ALGO_OPERATOR = 1,
+  TYPE_VARIBLE = 2,
+  TYPE_CMP_OPERATOR = 3,
+  TYPE_CONST = 4,
+  TYPE_COMMA = 5,
+  TYPE_OTHERS = 6,
+};
+
 class Node {
 public:
   Node() : value(nullptr), first(nullptr), second(nullptr), third(nullptr){};
@@ -65,7 +75,7 @@ private:
   };
   inline bool is_parentheses(char c) { return c == '(' || c == ')'; };
   // 快速实现词法分析里的token分析
-  inline int get_token_type(char c, int pre_type);
+  inline StrTokenType get_token_type(char c, StrTokenType pre_type);
   inline bool is_terminate(char c) { return c == '\0'; };
 
   //是否左结合
