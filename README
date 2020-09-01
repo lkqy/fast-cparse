@@ -1,49 +1,182 @@
-以_, a~z 开头的token为变量(c语言的变量规范)
+
+## 表达式变量、常量
+以_, a~z 开头的token为变量
+
 以A~Z 开头的token为函数
+
 支持常量类型，比如1=>long, -1.0=>double, +2.0=>double
 
-这个实现主要解决高性能场景下的动态求值，目前只支持特定类型的操作。
-1、+ - * / % => 仅限int long float double
-2、and or not => 仅限 bool 类型
-3、> >= == < <= != 仅限int long float double string
-4、in => vector, map, string
-5、function 调用, 参数为1， 2， 3, 返回值为ValuePtr类型
-6、内置VEC、SET函数，用于初始化常量数组、集合
-7、线程安全
-8、^ 返回结果为double类型
+## 功能支持
+1、+ - * / % ^(幂运算) 支持5种类型的数值类型及对应的数组类型
+
+2、and or not
+
+3、> >= == < <= != 支持四种类型的数值类型及对应的数组类型、string
+
+4、in => vector, map, string（这个实现主要解决高性能场景下的动态求值，目前只支持特定类型的操作）
+
+5、内置SET函数，用于初始化常量数组、集合
+
+6、线程安全
+
+7、不会触发异常
+
+## 值类型
+BoolValue
+
+IntValue
+
+LongValue
+
+FloatValue
+
+DoubleValue
+
+StringValue
+
+BoolArrayValue
+
+IntArrayValue
+
+LongArrayValue
+
+FloatArrayValue
+
+DoubleArrayValue
+
+StringArrayValue
 
 
+## 求值接口
+eval_bool       => bool
 
-缺点：
-1、不支持类型提升, 为防止异常，特执行如下动作:
-   对于不同类型之间的操作，如果是目标是bool结果，那么不同类型比较一律为false
-                                  + - * / % in 等操作，保持左数
-                                  VEC, SET 以第一个元素类型为标准，跳过不合法的类型
-2、由于动态求值本身问题，输入数值、表达式一定要符合要求
-3、函数调用只限于固定函数参数类型的求解
+eval_int        => int
 
-目前的性能瓶颈：
-1、动态对象申请
+eval_float      => float
 
-使用方法:
-    std::string exp("a < 7 and b < 4 and not c");
-    ShuntingYard sy(exp);
-    sy.compile();
-    int t = 0;
-    for (size_t i = 0; i < count; ++i) {
-        std::vector<std::pair<const char*, Value*>> env = {
-            std::make_pair<const char*, Value*>("a",  new LongValue(i%7)),
-            std::make_pair<const char*, Value*>("b",  new LongValue(i%7)),
-            std::make_pair<const char*, Value*>("c",  new BoolValue(false)),
-        };
-        std::string log;
-        t+= sy.eval_bool(env, log); //传入的env指针会自动释放，目前没有考虑指针重复问题，传入时需谨慎
-        // 要检查log是否为空(传入的数值类型不对会触发异常)
-        assert(log.emtpy());
-    }
-    std::cout<<"parse  eval:"<<exp<<", loop:"<<t<<"\n";
+eval_double     => double
 
+eval_bools      => std::vector\<bool\>
+
+eval_ints       => std::vector\<int\>
+
+eval_floats     => std::vector\<float\>
+
+eval_doubles    => std::vector\<double\>
+
+
+## Example1: 最朴素的调用
+
+```javascript
+    Compile compile;
+    auto env = compile.get("a < 7 and b < 4 and not c");
+    ASSERT_TRUE(env->is_valid());
+    env->add("a", 1);
+    env->add("b", 2);
+    env->add("c", 3);
+    std::vecctor<bool> ret
+    ASSERT_TRUE(env->eval(ret));
+    ASSERT_FALSE(ret);
+```
 上述例子的耗时为：count=1百万时，耗时653毫秒
 
-TODO:
-减少动态内存申请
+## Example2: 共享data
+
+```javascript
+    Compile compile;
+    DataCollector dc;
+    dc.add("a", 1);
+    dc.add("b", 2);
+    dc.add("c", 3);
+
+    {
+        auto env = compile.get("a < 7 and b < 4 and not c");
+        ASSERT_TRUE(env->is_valid());
+        env->add(dc);
+        std::vecctor<bool> ret
+        ASSERT_TRUE(env->eval(ret));
+        ASSERT_FALSE(ret);
+    }
+    {
+        auto env = compile.get("a < 7 or b < 4 or not c");
+        ASSERT_TRUE(env->is_valid());
+        env->add(dc);
+        std::vecctor<bool> ret
+        ASSERT_TRUE(env->eval(ret));
+        ASSERT_TRUE(ret);
+    }
+```
+
+
+## Example3: 变量按需获取
+
+```javascript
+    typedef std::function<Value*(const std::unordered_map<std::string, float>&, const std::string& name)> Func;
+    Func f = [](const std::unordered_map<std::string, float>& m, const std::string& name) -> Value* {
+        if (m.find(name) == m.end())
+            return nullptr;
+        return new FloatValue(m.at(name));
+    };
+    std::unordered_map<std::string, float> data = {
+            {"a", 1.0f}, {"b", 2.0f}, {"c", 3.0f},
+    };
+
+    Compile compile;
+    auto env = compile.get("a+b+c");
+    env->set_data_func<std::unordered_map<std::string, float>>(f);
+    env->add_data_source(data);
+    float result = 0;
+    ASSERT_TRUE(env->is_valid());
+    ASSERT_TRUE(env->eval(result));
+    ASSERT_EQ(result, 6.0f);
+```
+
+
+## 功能扩展
+可以自定义函数，注册后，可以扩展表达式功能。目前支持的函数类型为参数为1个、 2个或者3个, 返回值为ValuePtr类型
+
+
+## 瓶颈
+目前的性能瓶颈是字符串查找、二叉树遍历。核心是cache missing率高
+
+
+## 性能对比
+比较场景：(a^b+c+d/e-f+(h^i+j*k-m+n)) * (1.0 + o *p ^ q /r+s+t)
+
+测试方法：循环100万次
+
+场景        耗时
+
+parse       5.923秒
+
+lua         1.842秒
+
+parse向量版 0.358秒
+
+ps: 编译1万次，耗时0.33秒，每一次编译33微秒
+
+## ToDo
+
+1) 检查内存缺页问题
+
+2) 递归求值转换成循环
+
+3) 集合要求强制类型，需要放开
+
+4) 支持string +
+
+5) 确认所有标量都已经添加
+
+6) 函数参数类型提升
+
+7) 自适应向量展开运算
+
+8) 操作符类型不匹配时要报错
+
+9) get时线程安全
+
+## 说明
+
+ 1、env->add 指针时，不要直接写env->add("xx", &ctx); c++默认为bool类型
+
+
